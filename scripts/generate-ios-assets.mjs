@@ -23,8 +23,8 @@ const splashSvg = `
 <svg width="2732" height="2732" viewBox="0 0 2732 2732" xmlns="http://www.w3.org/2000/svg">
   <rect width="2732" height="2732" fill="#FAF8F4"/>
   <rect x="1106" y="930" width="520" height="520" rx="132" fill="#1A1714"/>
-  <text x="1366" y="1266" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="168" font-weight="700" fill="#FAF8F4" letter-spacing="10">PP</text>
-  <text x="1366" y="1602" text-anchor="middle" font-family="Georgia, serif" font-size="118" font-style="italic" fill="#1A1714">PlacementPrep</text>
+  <text x="1366" y="1266" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="168" font-weight="700" fill="#FAF8F4" letter-spacing="10">CR</text>
+  <text x="1366" y="1602" text-anchor="middle" font-family="Georgia, serif" font-size="118" font-style="italic" fill="#1A1714">Cracked</text>
   <text x="1366" y="1692" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="42" font-weight="600" letter-spacing="13" fill="#B0A89E">DAILY RETRIEVAL PRACTICE</text>
 </svg>`;
 

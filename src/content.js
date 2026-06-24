@@ -1,4 +1,4 @@
-// Content bank for PlacementPrep.
+// Content bank for Cracked.
 // Each MCQ: { id, subject, concept, difficulty, stem, options[{text, sub, fix}], correctIndex, proTip, lesson }
 // The correct option keeps fix: "". Every distractor explains why it is wrong in `fix`.
 // Subjects: DBMS, OS, CN, OOP. DSA prompts are self-graded logic drills.
@@ -2070,6 +2070,926 @@ export const QUESTIONS = [
       "Singleton guarantees one instance and a global access point, which is handy for shared config or connection pools — but it introduces global state that complicates testing and hides dependencies. Dependency injection of a single instance is often a cleaner alternative.",
     lesson:
       "The Singleton pattern restricts a class to a single instance and provides a global access point to it, useful for shared resources like configuration or a connection pool. The well-known caveat is that it introduces global mutable state, which can hide dependencies, complicate unit testing, and cause subtle issues with concurrency and initialization order. Many teams prefer injecting one shared instance instead.",
+  },
+
+  // ----------------------------------------------------------------------------
+  // C++
+  // ----------------------------------------------------------------------------
+  {
+    id: "q-cpp-refptr-001",
+    subject: "CPP",
+    concept: "References vs Pointers",
+    difficulty: "easy",
+    stem:
+      "A function signature is `void apply(Config& cfg)`. A teammate asks why it isn't `Config* cfg` instead, since both avoid copying the struct. What's the key behavioral difference that justifies the reference here?",
+    options: [
+      {
+        text: "References can't be null and can't be reseated, so callers can't pass a missing config or accidentally rebind it",
+        sub: "Reference is bound once, for life, to a valid object",
+        fix: "",
+      },
+      {
+        text: "References are faster than pointers because they avoid an extra memory address",
+        sub: "Performance difference",
+        fix:
+          "Under the hood a reference is typically implemented as a pointer; there's no inherent performance advantage. The real difference is in the guarantees the type system gives you.",
+      },
+      {
+        text: "References allow the function to modify the caller's variable, but pointers don't",
+        sub: "Mutability difference",
+        fix:
+          "A non-const pointer can mutate the pointee just as well: `(*cfg).field = x;`. Both can express mutation; the const-ness is independent of reference vs pointer.",
+      },
+      {
+        text: "References are copied by value when passed, so the function gets its own config",
+        sub: "Pass-by-value semantics",
+        fix:
+          "A reference is an alias for the original object, not a copy — that's exactly why `apply` can see and modify the caller's struct in place.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Reach for a reference parameter when the argument is guaranteed to exist and won't be reseated. Reach for a pointer (or `std::optional<T&>`-style pattern) when 'no value' is a real, expected case you must handle.",
+    lesson:
+      "A reference must be bound to a valid object at the point it's declared and can never be null or rebound to a different object afterward. A pointer can be null, can be reassigned to point elsewhere, and requires explicit dereferencing. Neither is inherently faster — both are typically pointer-sized under the hood — so the choice is about expressing 'this always refers to something valid' (reference) versus 'this may or may not refer to something, and that may change' (pointer).",
+  },
+  {
+    id: "q-cpp-const-001",
+    subject: "CPP",
+    concept: "Const Correctness",
+    difficulty: "medium",
+    stem:
+      "A method is declared `int size() const;` on a class wrapping a `std::vector`. Calling `obj.size()` on a `const Widget&` compiles fine, but calling a non-const method `obj.resize(10)` on that same const reference fails to compile. Why does the `const` qualifier on the method matter here?",
+    options: [
+      {
+        text: "`const` on the method promises not to modify the object's observable state, so the compiler only allows it to be called through a const reference; non-const methods carry no such promise and are rejected",
+        sub: "Method const-ness is part of its signature, checked against the reference's const-ness",
+        fix: "",
+      },
+      {
+        text: "`const` methods run faster because the compiler skips bounds checking",
+        sub: "Performance optimization claim",
+        fix:
+          "`const` is purely a compile-time contract about not mutating object state; it has no effect on runtime checks like bounds checking.",
+      },
+      {
+        text: "The vector itself must be declared `const` for `size()` to work, which `resize()` then violates",
+        sub: "Member variable const-ness",
+        fix:
+          "The vector member isn't separately marked const; what matters is whether the *method* is marked const, which determines whether it can be invoked on a const object.",
+      },
+      {
+        text: "`resize(10)` fails only because 10 is a literal, not a variable",
+        sub: "Argument type issue",
+        fix:
+          "The argument type is irrelevant here — `resize` would fail through a const reference regardless of whether you pass a literal or a variable, because the method itself isn't const.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Marking every method that doesn't mutate the object as `const` lets you accept `const&` parameters everywhere, which documents intent and lets the compiler catch accidental mutations.",
+    lesson:
+      "A `const` member function promises the compiler it won't modify the object's logical state (modulo `mutable` members), which lets it be called on `const` objects or through `const` references. A non-const method makes no such promise, so the compiler refuses to call it on a const object — that's the whole mechanism, independent of the argument passed or any runtime behavior.",
+  },
+  {
+    id: "q-cpp-raii-001",
+    subject: "CPP",
+    concept: "RAII",
+    difficulty: "medium",
+    stem:
+      "A function opens a file handle with `FILE* f = fopen(path, \"r\");`, then does some processing, then calls `fclose(f);` at the end. Midway through processing, an exception is thrown and propagates out of the function. What's the consequence, and what's the idiomatic C++ fix?",
+    options: [
+      {
+        text: "`fclose(f)` is skipped because the throw exits before reaching it, leaking the handle; wrap the handle in an RAII type whose destructor calls `fclose`",
+        sub: "Stack unwinding skips remaining statements, not destructors",
+        fix: "",
+      },
+      {
+        text: "Nothing leaks — C++ automatically closes any open file handles when an exception is thrown",
+        sub: "Automatic cleanup claim",
+        fix:
+          "C++ guarantees destructors run during stack unwinding, but a raw `FILE*` has no destructor to call — there's no automatic cleanup for resources that aren't owned by an object with a destructor.",
+      },
+      {
+        text: "The program will fail to compile because you can't throw exceptions in a function that opens a file",
+        sub: "Compile-time restriction",
+        fix:
+          "There's no such restriction; this compiles and runs fine. The problem is a runtime resource leak, not a compile error.",
+      },
+      {
+        text: "The exception will be caught automatically and `fclose(f)` will still run because it's the last line of the function",
+        sub: "Implicit catch behavior",
+        fix:
+          "An uncaught exception unwinds the stack immediately, skipping all remaining statements in the function body, including that final `fclose(f)` line — it never executes.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "RAII (Resource Acquisition Is Initialization) is C++'s core idiom for exception safety: tie a resource's lifetime to an object's constructor/destructor so cleanup happens automatically on every exit path, including exceptions.",
+    lesson:
+      "When an exception propagates, C++ unwinds the stack and runs the destructors of stack-allocated objects in scope, but it does not run arbitrary 'cleanup' statements that simply weren't reached — those are skipped. A raw `FILE*` has no destructor, so an exception thrown before `fclose` leaks the handle. Wrapping it in an RAII type (or using `std::unique_ptr` with a custom deleter, or `std::fstream`) guarantees the destructor — and therefore the cleanup — runs on every exit path.",
+  },
+  {
+    id: "q-cpp-slicing-001",
+    subject: "CPP",
+    concept: "Object Slicing",
+    difficulty: "hard",
+    stem:
+      "`std::vector<Shape> shapes;` holds objects passed in as `Shape` by value, where `Circle` derives from `Shape`. A `Circle` object is pushed in via `shapes.push_back(myCircle);`, then later code calls `shapes[0].draw()` expecting `Circle::draw()` to run. Instead `Shape::draw()` runs. Why?",
+    options: [
+      {
+        text: "Storing by value in a `vector<Shape>` copies only the `Shape` portion of `myCircle` — the derived `Circle` data and its dynamic type are sliced off, leaving a plain `Shape`",
+        sub: "Object slicing on copy into a base-typed container",
+        fix: "",
+      },
+      {
+        text: "`draw()` isn't declared `virtual` in `Circle`, so it can never override `Shape::draw()`",
+        sub: "Missing virtual on the derived override",
+        fix:
+          "Marking the override `virtual` in the derived class is optional once the base declares it virtual (though `override` is good practice) — that's not what's causing this. The object stored is no longer even a `Circle`.",
+      },
+      {
+        text: "`vector` reallocation during `push_back` corrupted the object",
+        sub: "Reallocation/move issue",
+        fix:
+          "Reallocation moves or copies elements but preserves their actual type and value; it doesn't truncate a derived object down to its base. The slicing happens at the `push_back` copy itself, regardless of reallocation.",
+      },
+      {
+        text: "`shapes[0]` returns a temporary copy each time it's called, which loses the `Circle` type",
+        sub: "operator[] semantics",
+        fix:
+          "`operator[]` on a `vector<Shape>` returns a reference to the stored element, not a fresh copy — but that stored element is already a sliced `Shape`, which is the real issue.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Whenever you need runtime polymorphism with a container, store pointers or smart pointers (`std::vector<std::unique_ptr<Shape>>`), never plain base-class values — value containers always slice derived data away.",
+    lesson:
+      "Object slicing occurs when a derived-class object is copied or assigned into a variable, parameter, or container element typed as the base class by value: only the base-class portion is copied, the derived data is discarded, and the dynamic type becomes exactly the base class — virtual dispatch can no longer reach the derived override because the object literally isn't a `Circle` anymore. The fix is to store pointers/references (or smart pointers) to the base type so polymorphism is preserved.",
+  },
+  {
+    id: "q-cpp-virtualdtor-001",
+    subject: "CPP",
+    concept: "Virtual Destructors",
+    difficulty: "hard",
+    stem:
+      "`class Base { public: virtual void run(); ~Base() {} };` and `class Derived : public Base { std::vector<int> buffer; ~Derived() {} };`. Code does `Base* p = new Derived(); delete p;`. `Derived`'s vector buffer never gets cleaned up properly. What's wrong?",
+    options: [
+      {
+        text: "`~Base()` isn't `virtual`, so `delete p` calls only `Base`'s destructor based on the static (pointer) type, never reaching `~Derived()` or destroying its members",
+        sub: "Non-virtual destructor through a base pointer",
+        fix: "",
+      },
+      {
+        text: "`run()` being virtual makes the whole class non-destructible through a base pointer",
+        sub: "Virtual method blocking destruction",
+        fix:
+          "A virtual method elsewhere in the class has no bearing on destructor dispatch; only the destructor's own virtual-ness controls which destructor runs through a base pointer.",
+      },
+      {
+        text: "`std::vector` members are never destroyed automatically; you must call `buffer.clear()` manually in the destructor",
+        sub: "Manual container cleanup claim",
+        fix:
+          "`std::vector`'s own destructor runs automatically as part of any destructor that completes for the object containing it — the bug here is that `~Derived()` never gets called at all, not that vector cleanup needs to be manual.",
+      },
+      {
+        text: "`new Derived()` allocated a `Base`-sized block, so there's no room for the vector member to be destroyed",
+        sub: "Allocation size issue",
+        fix:
+          "`new Derived()` always allocates enough memory for the full `Derived` object, vector member included. The allocation is correct; it's the destructor call that gets short-circuited.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Any class intended to be a polymorphic base — i.e., ever deleted through a base pointer — needs a `virtual` destructor. Without it, `delete` on a base pointer is undefined behavior whenever the actual object is a derived type with extra resources.",
+    lesson:
+      "When a destructor is not virtual, `delete` on a base-class pointer resolves the destructor call statically, based on the pointer's declared type, not the object's actual runtime type. So `delete p` where `p` is `Base*` calls only `~Base()`, skipping `~Derived()` entirely — any derived-only members (like the vector) are never properly destroyed, and in general this is undefined behavior. Declaring `~Base()` virtual fixes it by making destructor dispatch go through the vtable like any other virtual call.",
+  },
+  {
+    id: "q-cpp-move-001",
+    subject: "CPP",
+    concept: "Move Semantics",
+    difficulty: "medium",
+    stem:
+      "A function builds a large `std::string result` locally and returns it: `return result;`. A teammate suggests changing it to `return std::move(result);` to 'avoid the copy.' Is this necessary, and why?",
+    options: [
+      {
+        text: "Not necessary — returning a local by value already triggers move construction (or is elided) automatically since C++11, so the explicit `std::move` adds nothing and can even block move elision in some cases",
+        sub: "Implicit move-on-return for local objects",
+        fix: "",
+      },
+      {
+        text: "Yes, necessary — without `std::move` the compiler always deep-copies `result` into the caller's variable",
+        sub: "Copy-by-default claim",
+        fix:
+          "Since C++11, returning a local object by value is treated as an rvalue and the compiler prefers move construction (or applies copy elision) automatically — no explicit `std::move` is required for this common case.",
+      },
+      {
+        text: "Yes, necessary — `std::string` doesn't support move semantics, only copy, so this is the only way to avoid copying",
+        sub: "std::string move-support claim",
+        fix:
+          "`std::string` has had a move constructor since C++11 specifically to make exactly this kind of return efficient without any explicit `std::move`.",
+      },
+      {
+        text: "Not necessary, but only because `result` is a string — for other types like `std::vector` the explicit `std::move` would be required",
+        sub: "Type-specific exception",
+        fix:
+          "The same automatic move-on-return behavior applies to any movable type, `std::vector` included — it's a language rule about returning named local variables, not specific to `std::string`.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "`std::move` is most useful when you're handing off ownership of a named object across an assignment, into a container, or as an argument — not on a plain `return localVar;`, where the language already does the efficient thing. Wrapping it can actually disable NRVO (named return value optimization) in some compilers.",
+    lesson:
+      "Move semantics let resources (heap buffers, file handles, etc.) be transferred out of an object instead of deep-copied, by binding to an rvalue reference (`T&&`) and leaving the source in a valid-but-unspecified, cheap-to-destroy state. For `return localVar;` of a named local, the compiler treats the return as an rvalue and will use move construction or elide the copy/move entirely (NRVO) — both outcomes a manual `std::move` doesn't improve on, and which it can sometimes interfere with.",
+  },
+  {
+    id: "q-cpp-copy-001",
+    subject: "CPP",
+    concept: "Copy Constructor",
+    difficulty: "hard",
+    stem:
+      "`class Buffer { char* data; public: Buffer(int n) { data = new char[n]; } };` has no explicit copy constructor or destructor. Code does `Buffer a(10); Buffer b = a;` then lets both go out of scope, and the program crashes with a heap corruption error. Why?",
+    options: [
+      {
+        text: "The compiler-generated copy constructor copies the `data` pointer's address, not the buffer it points to — `a` and `b` end up sharing one buffer, and each object's (also compiler-generated, missing) destructor would double-free it",
+        sub: "Default shallow copy of a raw pointer member",
+        fix: "",
+      },
+      {
+        text: "`Buffer b = a;` is illegal syntax for copying objects and silently corrupts memory instead of failing to compile",
+        sub: "Invalid copy syntax claim",
+        fix:
+          "`Buffer b = a;` is valid copy-initialization syntax; it compiles fine and does call a copy constructor — the compiler-generated one — which is exactly the source of the bug, not a syntax problem.",
+      },
+      {
+        text: "`new char[n]` doesn't actually allocate heap memory for character arrays, only for objects with constructors",
+        sub: "Allocation-type restriction claim",
+        fix:
+          "`new char[n]` allocates `n` bytes on the heap just like any other array-new expression; there's no special restriction for `char`.",
+      },
+      {
+        text: "The crash is caused by `n` not being initialized to a default value when `Buffer(int n)` is called without arguments",
+        sub: "Uninitialized parameter claim",
+        fix:
+          "`Buffer(int n)` requires an argument — it isn't called without one here (`Buffer a(10);` passes 10) — so there's no uninitialized-parameter issue.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Any class managing a raw resource (pointer, handle, fd) needs the Rule of Three/Five: define copy constructor, copy assignment, and destructor together (and move constructor/assignment in modern C++) — or better, hold the resource in a `std::unique_ptr`/`std::vector` and get correct behavior for free.",
+    lesson:
+      "Without a user-defined copy constructor, C++ generates one that performs a memberwise shallow copy — for a raw pointer member, that copies the address, not the pointee. Two objects then alias the same heap buffer. When both go out of scope, each runs the (also default) destructor, which here does nothing special — but if a destructor freed `data`, it would free the same memory twice (double free), a classic heap-corruption bug. The fix is a proper deep-copy copy constructor, or RAII via a smart pointer/container that already implements correct copy semantics.",
+  },
+  {
+    id: "q-cpp-iterator-001",
+    subject: "CPP",
+    concept: "Iterator Invalidation",
+    difficulty: "hard",
+    stem:
+      "Code iterates a `std::vector<int> nums` with a range-based for loop, and inside the loop calls `nums.push_back(x)` whenever a condition holds. It crashes or behaves erratically partway through. What's the most likely cause?",
+    options: [
+      {
+        text: "`push_back` may trigger reallocation to a new, larger buffer, invalidating the iterator the range-based for loop is using internally, so continuing the loop accesses freed memory",
+        sub: "Reallocation invalidates active iterators",
+        fix: "",
+      },
+      {
+        text: "`std::vector` doesn't support modification while iterating under any circumstances, and the standard requires this to throw a compile error",
+        sub: "Blanket modification ban claim",
+        fix:
+          "It's legal C++ to modify a vector during iteration in some controlled ways (e.g., erasing via the iterator returned by `erase`), and it never produces a compile error — the bug here is a runtime invalidation issue, undetected at compile time.",
+      },
+      {
+        text: "The condition inside the loop is being re-evaluated incorrectly because `x` is uninitialized",
+        sub: "Uninitialized variable claim",
+        fix:
+          "The question doesn't indicate `x` is uninitialized, and that wouldn't explain a crash specifically tied to calling `push_back` mid-iteration — the structural issue is iterator invalidation from reallocation.",
+      },
+      {
+        text: "Range-based for loops always copy the entire container at the start, so `push_back` inside the loop has no effect on iteration at all and is perfectly safe",
+        sub: "Implicit-copy claim",
+        fix:
+          "Range-based for loops iterate over the original container by reference by default, not a copy — that's exactly why mutating the container's storage during iteration is dangerous.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Never grow or shrink a `vector` while holding iterators (including a range-based for loop's hidden ones) into it. If you need to add elements based on a scan, collect them in a separate container and append after the loop, or index by position carefully and re-check bounds.",
+    lesson:
+      "`std::vector` stores elements in one contiguous, dynamically-resized buffer. When `push_back` exceeds current capacity, it allocates a new, larger buffer, copies/moves elements over, and frees the old buffer — any iterators (including the ones a range-based for loop uses internally) that pointed into the old buffer are now dangling. This is iterator invalidation, and using an invalidated iterator is undefined behavior, which is why the crash is intermittent and condition-dependent rather than guaranteed.",
+  },
+  {
+    id: "q-cpp-smartptr-001",
+    subject: "CPP",
+    concept: "Smart Pointers",
+    difficulty: "hard",
+    stem:
+      "Two classes hold `std::shared_ptr` to each other: `Parent` has a `shared_ptr<Child> child;` and `Child` has a `shared_ptr<Parent> parent;`. Even after all outside references go out of scope, neither object's destructor ever runs, and a memory profiler shows a leak. Why?",
+    options: [
+      {
+        text: "The two objects hold reference-counted pointers to each other, so each keeps the other's count above zero forever — a reference cycle that `shared_ptr`'s refcounting can't detect or break on its own",
+        sub: "Reference cycle between shared_ptrs",
+        fix: "",
+      },
+      {
+        text: "`shared_ptr` has a hard limit on how many shared owners it can track, and once exceeded it silently stops decrementing",
+        sub: "Refcount limit claim",
+        fix:
+          "There's no such hard limit; `shared_ptr` reference counts are ordinary integers with effectively unlimited range for practical purposes. The issue here is a cycle, not a count ceiling.",
+      },
+      {
+        text: "`shared_ptr` only works correctly for one direction of ownership; using it for both `Parent → Child` and `Child → Parent` is undefined behavior",
+        sub: "Bidirectional-ownership UB claim",
+        fix:
+          "Each `shared_ptr` works correctly and predictably on its own — the problem isn't undefined behavior, it's the perfectly well-defined but undesirable outcome of a reference cycle keeping both counts non-zero.",
+      },
+      {
+        text: "The destructors never run because `Parent` and `Child` don't define explicit destructors of their own",
+        sub: "Missing explicit destructor claim",
+        fix:
+          "Compiler-generated destructors are sufficient and would run fine — the actual blocker is that the shared_ptr reference counts never reach zero, not the absence of user-defined destructors.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Break ownership cycles by making one direction of the relationship a `std::weak_ptr` instead of `shared_ptr` — typically the 'back-pointer' (e.g., `Child::parent` as `weak_ptr<Parent>`) so it observes without contributing to the reference count.",
+    lesson:
+      "`std::shared_ptr` manages an object via reference counting: the object is destroyed when its count reaches zero. If two (or more) objects hold `shared_ptr`s to each other, they form a cycle where each one's count is kept alive by the other, so neither ever reaches zero — even though nothing outside the cycle references them. This is a classic shared_ptr memory leak. `std::weak_ptr` exists precisely to model non-owning references that don't participate in the count, breaking such cycles.",
+  },
+  {
+    id: "q-cpp-binding-001",
+    subject: "CPP",
+    concept: "Virtual Dispatch",
+    difficulty: "medium",
+    stem:
+      "`class Base { public: void greet() { std::cout << \"Base\"; } };` and `class Derived : public Base { public: void greet() { std::cout << \"Derived\"; } };`. Code does `Base* p = new Derived(); p->greet();` and it prints \"Base\", surprising the developer who expected \"Derived\". Why?",
+    options: [
+      {
+        text: "`greet()` isn't declared `virtual` in `Base`, so the call is resolved at compile time using the pointer's static type (`Base*`), not the object's actual runtime type",
+        sub: "Non-virtual method resolved statically",
+        fix: "",
+      },
+      {
+        text: "`Derived::greet()` doesn't actually override `Base::greet()` because the parameter lists differ",
+        sub: "Signature mismatch claim",
+        fix:
+          "Both `greet()` methods have identical signatures (no parameters) — the issue isn't a signature mismatch, it's that neither is marked virtual, so there's no dynamic dispatch to begin with.",
+      },
+      {
+        text: "`new Derived()` constructs a `Base` object first and only later converts it to `Derived`, so at the time of the call it's still a `Base`",
+        sub: "Two-stage construction claim",
+        fix:
+          "`new Derived()` constructs a complete `Derived` object in one step (running `Base`'s constructor as part of that), and the object's actual type is `Derived` the entire time — the printed result is about call resolution, not object identity.",
+      },
+      {
+        text: "`std::cout` caches the first class name it sees and reuses it for subsequent calls through the same pointer type",
+        sub: "Output caching claim",
+        fix:
+          "`std::cout` has no such caching behavior; each call independently prints whatever string literal the executed function contains. The executed function is `Base::greet()`, hence \"Base\".",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "If a base class method might ever need to be overridden with runtime polymorphism, mark it `virtual` (and mark the override `override` for compiler-checked correctness). Without `virtual`, calls through a base pointer/reference always use the base's version, regardless of the real object type.",
+    lesson:
+      "C++ uses static (compile-time) binding by default: a non-virtual method call is resolved based on the declared type of the pointer or reference used to call it, not the actual type of the object it points to. Only `virtual` methods get dynamic (runtime) binding via the vtable, where the actual object's overridden version is invoked. Here, since `greet()` isn't virtual, `p->greet()` resolves to `Base::greet()` purely because `p` is typed as `Base*`, regardless of it actually pointing at a `Derived`.",
+  },
+  {
+    id: "q-cpp-template-001",
+    subject: "CPP",
+    concept: "Templates",
+    difficulty: "medium",
+    stem:
+      "A library exposes `template <typename T> T max_of(T a, T b) { return a > b ? a : b; }` instead of writing separate `int max_of(int, int)` and `double max_of(double, double)` overloads. What's the key tradeoff of the template approach compared to writing separate overloads or using a base-class/virtual-function approach?",
+    options: [
+      {
+        text: "Templates generate a separate compiled function per type used (resolved at compile time, zero runtime dispatch cost), at the cost of longer compile times and code bloat across translation units, versus virtual dispatch which has one function but a small runtime indirection cost",
+        sub: "Compile-time monomorphization vs runtime polymorphism",
+        fix: "",
+      },
+      {
+        text: "Templates are strictly slower at runtime than virtual functions because the compiler must check the type at every call",
+        sub: "Runtime type-check claim",
+        fix:
+          "It's the reverse: template instantiation resolves the concrete type entirely at compile time, so there's no runtime type check at all — that's precisely why templates avoid the small overhead virtual dispatch has.",
+      },
+      {
+        text: "Templates require all types passed to `T` to inherit from a common base class, just like virtual functions require a base class",
+        sub: "Inheritance-requirement claim",
+        fix:
+          "Templates work with any type that supports the operations used in the body (here, `operator>`) — there's no inheritance requirement at all, which is one of the main differences from a virtual-function/base-class design.",
+      },
+      {
+        text: "A template function can only be called with exactly the types it was originally written and compiled for, like a regular overload set",
+        sub: "Fixed type-set claim",
+        fix:
+          "A template is instantiated fresh for any type that satisfies its required operations, including types written long after the template itself — that flexibility, without modifying the template, is the point of templates.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Reach for templates (compile-time, 'static' polymorphism) when you want zero runtime overhead and the set of types is known at compile time; reach for virtual functions (runtime, 'dynamic' polymorphism) when you need to select behavior for types not known until runtime, e.g. through a plugin or container of mixed derived objects.",
+    lesson:
+      "Templates achieve generic code via monomorphization: the compiler generates a distinct, fully-typed function (or class) for every concrete type the template is instantiated with, so calls have no runtime dispatch cost — but this can increase binary size and compile time, and every type must be known at compile time. Virtual functions achieve generic code via dynamic dispatch through a vtable at runtime, which supports types decided at runtime (e.g. loaded from user input or a plugin) at the cost of a small indirect-call overhead and shared, non-duplicated code.",
+  },
+  {
+    id: "q-cpp-exception-001",
+    subject: "CPP",
+    concept: "Exception Safety",
+    difficulty: "hard",
+    stem:
+      "A function does `Resource* r = new Resource(); doWork(r); delete r;` where `doWork` can throw. When it throws, `delete r` never executes and the resource leaks. A teammate proposes wrapping it in `try { doWork(r); } catch (...) { delete r; throw; }`. Is this a good fix?",
+    options: [
+      {
+        text: "It works but is fragile boilerplate that must be repeated at every throw site; the idiomatic fix is to manage `r` with a `std::unique_ptr` so its destructor handles cleanup automatically on every exit path, including exceptions",
+        sub: "Manual catch-and-rethrow vs RAII ownership",
+        fix: "",
+      },
+      {
+        text: "It's broken because `catch (...)` can never catch exceptions thrown by `doWork`",
+        sub: "Catch-all limitation claim",
+        fix:
+          "`catch (...)` catches any exception type, including ones thrown by `doWork` — that part of the proposed fix is functionally correct, just not the most maintainable approach.",
+      },
+      {
+        text: "It's broken because `throw;` inside a catch block re-throws a brand new, unrelated exception instead of the original",
+        sub: "Rethrow semantics claim",
+        fix:
+          "A bare `throw;` inside a catch block re-throws the *original* exception object currently being handled, preserving its type and data — it doesn't create a new, unrelated one.",
+      },
+      {
+        text: "It's unnecessary because raw `new`/`delete` pairs are automatically exception-safe in C++17 and later",
+        sub: "Automatic exception-safety claim",
+        fix:
+          "There has been no language change making raw `new`/`delete` automatically exception-safe; you still need RAII (smart pointers, containers) or manual try/catch to guarantee cleanup runs when an exception is thrown between them.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Prefer RAII over manual try/catch-and-cleanup wherever possible: `std::unique_ptr<Resource> r(new Resource());` guarantees `delete` runs via the destructor on every exit path — normal return, early return, or exception — without writing a single catch block.",
+    lesson:
+      "Manual `try { ... } catch (...) { cleanup(); throw; }` is functionally correct but doesn't scale: every function that acquires a raw resource needs its own copy of this boilerplate, and it's easy to forget. RAII solves exception safety structurally: tie the resource to an object whose destructor performs cleanup, and the language guarantees that destructor runs during stack unwinding on any exit path — no explicit catch block required, and no detail to forget at each call site.",
+  },
+
+  // ----------------------------------------------------------------------------
+  // Python
+  // ----------------------------------------------------------------------------
+  {
+    id: "q-py-mutdefault-001",
+    subject: "PYTHON",
+    concept: "Mutable Default Arguments",
+    difficulty: "medium",
+    stem:
+      "`def add_item(item, bucket=[]): bucket.append(item); return bucket`. Calling `add_item(1)` returns `[1]`. Calling `add_item(2)` with no second argument, right after, returns `[1, 2]` instead of the expected `[2]`. Why?",
+    options: [
+      {
+        text: "The default value `[]` is created once, when the function is defined, and reused across all calls that don't pass `bucket` explicitly — so it silently accumulates state between calls",
+        sub: "Default arguments are evaluated once at def time, not per call",
+        fix: "",
+      },
+      {
+        text: "Lists in Python are always passed by reference, so any list anywhere in the program shares the same underlying memory",
+        sub: "Global list-sharing claim",
+        fix:
+          "Python lists aren't globally shared by virtue of being lists — two separate `[]` literals normally produce two independent objects. The bug here is specifically that the *default argument's* single list object is reused across calls, not a property of all lists.",
+      },
+      {
+        text: "`append` returns a new list each time, but the function forgets to capture the return value, so it appends to a stale copy",
+        sub: "append return-value claim",
+        fix:
+          "`list.append` mutates in place and returns `None`; its return value is irrelevant here. The function correctly mutates and returns `bucket` itself — the issue is which object `bucket` refers to across calls.",
+      },
+      {
+        text: "Python re-evaluates `bucket=[]` on every call but caches the previous call's result due to function memoization being on by default",
+        sub: "Implicit memoization claim",
+        fix:
+          "Python functions aren't memoized by default — there's no caching layer here. The actual mechanism is simpler: the default value object is created exactly once, at function-definition time, period.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Never use a mutable object (list, dict, set) as a default argument unless you specifically want shared state across calls. The standard idiom is `def add_item(item, bucket=None): if bucket is None: bucket = []`.",
+    lesson:
+      "In Python, default argument values are evaluated exactly once, at the time the `def` statement runs — not freshly on every call. For immutable defaults (numbers, strings, `None`) this is harmless since they can't be mutated in place. For mutable defaults like `[]` or `{}`, every call that omits the argument shares and mutates the *same* object, so changes persist across calls in a way that surprises most people coming from languages where default expressions re-evaluate per call.",
+  },
+  {
+    id: "q-py-gil-001",
+    subject: "PYTHON",
+    concept: "GIL",
+    difficulty: "hard",
+    stem:
+      "A developer parallelizes a CPU-heavy number-crunching function across 4 `threading.Thread` workers expecting a roughly 4x speedup on a multi-core machine, but measures almost no speedup at all. Switching the same workers to `multiprocessing.Process` gives the expected speedup. What explains the threading result?",
+    options: [
+      {
+        text: "CPython's Global Interpreter Lock allows only one thread to execute Python bytecode at a time, so CPU-bound threads contend for the same lock and don't run truly in parallel — `multiprocessing` sidesteps this by using separate interpreter processes, each with its own GIL",
+        sub: "GIL serializes bytecode execution across threads in one process",
+        fix: "",
+      },
+      {
+        text: "`threading.Thread` in Python doesn't actually create OS-level threads, so the 'parallelism' was always fake even for I/O-bound work",
+        sub: "Fake-threads claim",
+        fix:
+          "`threading.Thread` does create real OS-level threads — they're genuinely useful for I/O-bound work where threads release the GIL while waiting on I/O. The GIL specifically limits *CPU-bound* parallelism within one process, not threading's existence.",
+      },
+      {
+        text: "4 threads on a 4-core machine should give exactly 4x speedup for any workload; getting less just means the hardware doesn't actually have 4 cores",
+        sub: "Hardware-doubt claim",
+        fix:
+          "Even with confirmed 4 real cores, CPU-bound Python threads in one process are limited by the GIL to roughly one core's worth of Python execution at a time — this is a CPython implementation detail, not a hardware limitation.",
+      },
+      {
+        text: "`multiprocessing.Process` and `threading.Thread` use the exact same underlying mechanism in CPython; the speedup difference must be due to unrelated code changes",
+        sub: "Same-mechanism claim",
+        fix:
+          "They're fundamentally different: `Process` spawns separate OS processes with independent memory and their own GIL each, enabling true parallel CPU execution, while `Thread` shares one process and one GIL — this is exactly why one gives the speedup and the other doesn't.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Use `threading` for I/O-bound concurrency (network calls, file I/O, waiting) where the GIL is released during the wait; use `multiprocessing` (or a C-extension that releases the GIL, like NumPy's vectorized ops) for CPU-bound parallelism that needs to use multiple cores.",
+    lesson:
+      "CPython's Global Interpreter Lock (GIL) ensures only one thread executes Python bytecode at any instant within a process, mainly to keep reference counting and the interpreter's internals thread-safe without per-object locks. This makes `threading` great for I/O-bound tasks (the GIL is released while waiting on I/O, letting other threads run) but ineffective for CPU-bound parallel speedup, since CPU-bound threads spend all their time wanting the GIL, not waiting. `multiprocessing` works around this by using multiple OS processes, each with its own interpreter and GIL, enabling genuine multi-core CPU parallelism at the cost of process-level overhead and no shared memory by default.",
+  },
+  {
+    id: "q-py-identity-001",
+    subject: "PYTHON",
+    concept: "is vs ==",
+    difficulty: "medium",
+    stem:
+      "`a = [1, 2, 3]; b = [1, 2, 3]; print(a == b)` prints `True`, but `print(a is b)` prints `False`. A beginner expected both to be the same. What's the distinction being shown?",
+    options: [
+      {
+        text: "`==` calls `__eq__` to compare the lists' contents/value for equality, while `is` checks whether both names refer to the exact same object in memory — `a` and `b` are two separate list objects that happen to hold equal contents",
+        sub: "Value equality vs identity",
+        fix: "",
+      },
+      {
+        text: "`is` is just a stricter, case-sensitive version of `==` for comparing values",
+        sub: "Strict-equality claim",
+        fix:
+          "`is` doesn't compare values at all, strictly or otherwise — it compares object identity (memory address), which is an entirely different question from whether two objects' contents are equal.",
+      },
+      {
+        text: "Lists can never be compared with `==`; Python silently falls back to `is` for lists specifically, which is why the result differs",
+        sub: "List-specific fallback claim",
+        fix:
+          "Lists fully support `==` via `list.__eq__`, comparing elements pairwise — that's exactly why `a == b` correctly returns `True` here. There's no fallback to `is` happening.",
+      },
+      {
+        text: "The result is a bug specific to this Python version; in correct behavior `a is b` should also be `True` for equal lists",
+        sub: "Version-bug claim",
+        fix:
+          "This is standard, intentional Python behavior across versions: `a` and `b` are constructed as two distinct list objects via separate literals, so they have different identities even though their values are equal.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Use `==` to ask 'do these have the same value?' and `is` to ask 'are these literally the same object?' A common correct use of `is` is comparing against singletons like `None`: `if x is None:` rather than `if x == None:`.",
+    lesson:
+      "`==` invokes the `__eq__` method, which by default (and for built-ins like `list`) compares values/contents for equality. `is` checks object identity — whether two references point to the exact same object in memory, equivalent to comparing `id(a) == id(b)`. Two separately constructed objects with equal contents (like `[1,2,3]` and `[1,2,3]`) are `==` but not `is`, since each list literal creates a new, distinct object.",
+  },
+  {
+    id: "q-py-generator-001",
+    subject: "PYTHON",
+    concept: "Generators",
+    difficulty: "medium",
+    stem:
+      "Processing a 50GB log file, one version reads it with `lines = [line for line in f]` and another with `lines = (line for line in f)`, then both iterate over `lines` once to count error entries. The list version crashes with a memory error; the generator version runs fine. Why?",
+    options: [
+      {
+        text: "The list comprehension eagerly reads and stores every line in memory at once before iteration even starts, while the generator expression produces lines lazily, one at a time, on demand — so its memory footprint stays small regardless of file size",
+        sub: "Eager materialization vs lazy, on-demand evaluation",
+        fix: "",
+      },
+      {
+        text: "Generators read files faster than lists because they use a more efficient file-reading algorithm internally",
+        sub: "Faster-I/O claim",
+        fix:
+          "Both forms read the file using the same underlying line-iteration mechanism; the generator's advantage here is about memory (not materializing all lines at once), not raw I/O speed.",
+      },
+      {
+        text: "List comprehensions can only hold up to a fixed number of elements (a hard cap) before Python raises a memory error, regardless of available RAM",
+        sub: "Hard element-count cap claim",
+        fix:
+          "There's no language-imposed element-count cap on lists; the memory error here is a direct consequence of available RAM being insufficient to hold every line of a 50GB file simultaneously, not a built-in limit.",
+      },
+      {
+        text: "The generator version actually reads less of the file than the list version, which is why it doesn't crash — it just silently undercounts errors",
+        sub: "Partial-read claim",
+        fix:
+          "A generator yields every line eventually when fully iterated — it processes the complete file, just one line at a time rather than all at once. It doesn't skip data; it changes when memory for each line is used and released.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Default to generator expressions (or generator functions with `yield`) over list comprehensions whenever you're going to iterate over the result just once and don't need random access or to know its length in advance — especially for large or unbounded data sources.",
+    lesson:
+      "A list comprehension builds and holds the entire resulting collection in memory before you can do anything with it. A generator expression (or a `yield`-based generator function) instead produces values lazily: each value is computed only when requested by the iteration, and previous values can be garbage-collected immediately afterward since nothing holds the whole sequence at once. This makes generators ideal for large or streaming data where the full collection would never fit in memory, at the cost of being single-pass (you can't re-iterate a generator without rebuilding it) and not supporting indexing or `len()`.",
+  },
+  {
+    id: "q-py-copy-001",
+    subject: "PYTHON",
+    concept: "Shallow vs Deep Copy",
+    difficulty: "hard",
+    stem:
+      "`import copy; original = [[1, 2], [3, 4]]; shallow = copy.copy(original); shallow[0].append(99)`. After this, `original` is now `[[1, 2, 99], [3, 4]]` too, even though only `shallow` was modified. What's happening?",
+    options: [
+      {
+        text: "`copy.copy` makes a new outer list but doesn't recursively copy the nested lists inside it — both `original` and `shallow` end up holding references to the same inner list objects, so mutating one inner list through either name is visible through both",
+        sub: "Shallow copy duplicates only the top level, not nested mutable contents",
+        fix: "",
+      },
+      {
+        text: "`copy.copy` is a no-op alias for the original list and doesn't create any new object at all",
+        sub: "No-op claim",
+        fix:
+          "`copy.copy` does create a genuinely new outer list object — that's why `shallow is original` would be `False`. The outer list is new; it's only the *inner* lists that remain shared, which is the actual point of 'shallow.'",
+      },
+      {
+        text: "`append` on a list always mutates every list with the same values, system-wide, regardless of how the lists were created",
+        sub: "Global-mutation-by-value claim",
+        fix:
+          "`append` only affects the specific list object it's called on. The reason `original` changes too is that `shallow[0]` and `original[0]` happen to be the *same* inner list object (due to the shallow copy), not some global rule about matching values.",
+      },
+      {
+        text: "This is a bug in the `copy` module; `copy.copy` is supposed to behave identically to `copy.deepcopy` for nested lists",
+        sub: "Module-bug claim",
+        fix:
+          "This is the documented, intentional distinction between the two functions: `copy.copy` performs a shallow copy by design, and `copy.deepcopy` exists specifically to recursively copy nested structures when that's what you need.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Use `copy.deepcopy` (or rebuild nested structures explicitly) whenever your data contains nested mutable objects and you need full independence between the original and the copy. For flat structures of immutables, a shallow copy is sufficient and cheaper.",
+    lesson:
+      "`copy.copy` (a shallow copy) creates a new container object but populates it with references to the *same* elements as the original — for a list of immutables (ints, strings) this looks indistinguishable from a deep copy because immutables can't be mutated in place anyway. But for a list of lists (or any nested mutable structure), the inner lists are shared objects: mutating an inner list via the copy is visible via the original too, since both outer lists point at identical inner list objects. `copy.deepcopy` instead recursively copies every nested level, producing a fully independent structure.",
+  },
+  {
+    id: "q-py-decorator-001",
+    subject: "PYTHON",
+    concept: "Decorators",
+    difficulty: "medium",
+    stem:
+      "A logging decorator is written as:\n```\ndef log_calls(func):\n    def wrapper(*args, **kwargs):\n        print(f\"calling {func.__name__}\")\n        return func(*args, **kwargs)\n    return wrapper\n```\nAfter applying `@log_calls` to a function `greet`, code that inspects `greet.__name__` and `greet.__doc__` for documentation tooling gets `'wrapper'` and `None` instead of `greet`'s real name and docstring. What's the cause and fix?",
+    options: [
+      {
+        text: "The decorator replaces `greet` with `wrapper`, whose own `__name__`/`__doc__` shadow the original function's metadata; wrapping `wrapper` with `functools.wraps(func)` copies the original function's metadata onto it",
+        sub: "Decorator returns a different function object, losing the original's introspection metadata",
+        fix: "",
+      },
+      {
+        text: "`*args, **kwargs` in the wrapper signature is what erases the original function's name and docstring",
+        sub: "Variadic-signature claim",
+        fix:
+          "`*args, **kwargs` only affects what arguments `wrapper` accepts and forwards; it has no effect on `__name__` or `__doc__`, which are separate attributes unrelated to the parameter list.",
+      },
+      {
+        text: "This only happens because `print` is called inside the wrapper; removing the print statement restores the correct metadata",
+        sub: "Side-effect-call claim",
+        fix:
+          "The `print` call is just a side effect executed when `wrapper` runs; it has no bearing on what `wrapper.__name__` or `wrapper.__doc__` evaluate to, which are fixed at function-definition time.",
+      },
+      {
+        text: "Decorators in Python always preserve `__name__` and `__doc__` automatically; the described symptom would actually be impossible",
+        sub: "Automatic-preservation claim",
+        fix:
+          "There's no automatic preservation — a hand-written decorator that returns a plain inner function genuinely does replace the original's `__name__`/`__doc__` with the wrapper's own, unless you explicitly use `functools.wraps` (or copy the attributes yourself) to fix it.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Always decorate your wrapper function with `@functools.wraps(func)` inside a custom decorator — it's a one-line fix that preserves `__name__`, `__doc__`, `__module__`, and other metadata, which matters for debugging, documentation generators, and anything that introspects functions.",
+    lesson:
+      "`@log_calls` applied to `greet` is sugar for `greet = log_calls(greet)`, which rebinds the name `greet` to the `wrapper` function object returned by the decorator — a genuinely different function object with its own `__name__` ('wrapper') and `__doc__` (`None`, since `wrapper` has no docstring). `functools.wraps(func)`, applied as a decorator on `wrapper` itself, copies over `func`'s `__name__`, `__doc__`, `__module__`, and other metadata so introspection tools see the original function's identity rather than the wrapper's.",
+  },
+  {
+    id: "q-py-scope-001",
+    subject: "PYTHON",
+    concept: "Closures and Late Binding",
+    difficulty: "hard",
+    stem:
+      "```\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda: i)\nprint([f() for f in funcs])\n```\nA developer expects `[0, 1, 2]` but gets `[2, 2, 2]`. Why?",
+    options: [
+      {
+        text: "Each lambda doesn't capture the value of `i` at creation time — it captures the *variable* `i` itself (a closure over the enclosing scope), and by the time the lambdas are called, the loop has finished and `i` holds its final value, 2, for all three",
+        sub: "Closures capture variables by reference, not the value at definition time",
+        fix: "",
+      },
+      {
+        text: "`lambda` functions in Python can only be called once each; calling all three in a list comprehension causes the first two to silently return stale cached results",
+        sub: "Single-call-limit claim",
+        fix:
+          "Lambdas can be called any number of times; there's no call limit or caching involved here. Each call to `f()` genuinely re-evaluates `i`, which is why all three calls consistently return the loop's final value.",
+      },
+      {
+        text: "`range(3)` is exhausted after the for loop runs once, so by the time the lambdas are called, `range` returns its last value (2) for every subsequent access",
+        sub: "Exhausted-range claim",
+        fix:
+          "The lambdas don't call `range` or re-iterate it at all — they just return the variable `i`. `range`'s exhaustion (or lack thereof) is irrelevant to why all three lambdas return the same value.",
+      },
+      {
+        text: "This is a Python bug present only in list comprehensions; using a regular `for` loop to call the functions instead would produce `[0, 1, 2]`",
+        sub: "Comprehension-specific-bug claim",
+        fix:
+          "The behavior is identical regardless of whether you call the functions via a list comprehension or an explicit `for` loop — it's not a comprehension quirk, it's how closures capture the loop variable `i`, which is the same single variable across all iterations.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "To capture the loop variable's *current* value per iteration, give each lambda/function its own parameter with that value as a default: `lambda i=i: i` — default argument values *are* evaluated immediately at definition time, which is exactly the difference that fixes this.",
+    lesson:
+      "Python closures capture variables, not values — a closure remembers a reference to the enclosing scope's variable, and looks it up fresh every time the closure is called, not at the moment it was created. In a loop, `i` is one single variable that gets reassigned each iteration; all three lambdas close over that same variable, so when they're eventually called (after the loop has finished and `i` is 2), they all see the loop's final value. This is sometimes called 'late binding' in closures, and it's a frequent surprise for anyone expecting value-capture-at-creation semantics like some other languages.",
+  },
+  {
+    id: "q-py-args-001",
+    subject: "PYTHON",
+    concept: "*args and **kwargs",
+    difficulty: "easy",
+    stem:
+      "A function is defined as `def configure(name, *flags, **options): ...` and called as `configure(\"server\", \"verbose\", \"debug\", timeout=30, retries=3)`. Inside the function, what do `flags` and `options` contain?",
+    options: [
+      {
+        text: "`flags` is the tuple `(\"verbose\", \"debug\")` — the extra positional arguments — and `options` is the dict `{\"timeout\": 30, \"retries\": 3}` — the keyword arguments",
+        sub: "*args collects extra positionals into a tuple; **kwargs collects keyword args into a dict",
+        fix: "",
+      },
+      {
+        text: "`flags` and `options` both contain every argument passed, including `\"server\"`, since `*` and `**` mean 'capture everything'",
+        sub: "Capture-everything claim",
+        fix:
+          "`name` is bound to `\"server\"` as the regular positional parameter it matches first; `*flags` and `**options` only soak up what's left over after the explicitly named parameters are satisfied, not the explicitly matched ones too.",
+      },
+      {
+        text: "`flags` is `[\"verbose\", \"debug\"]` as a list, and `options` is also a list of tuples `[(\"timeout\", 30), (\"retries\", 3)]`",
+        sub: "Wrong container-type claim",
+        fix:
+          "`*args` always collects into a `tuple`, not a `list`, and `**kwargs` always collects into a `dict`, not a list of tuples — the contents described are right in spirit but the container types are wrong.",
+      },
+      {
+        text: "This call raises a `TypeError` because you can't mix extra positional arguments with keyword arguments in the same call",
+        sub: "Mixing-not-allowed claim",
+        fix:
+          "Mixing extra positional arguments (captured by `*args`) and keyword arguments (captured by `**kwargs`) in a single call is exactly what this parameter pattern is designed to support, and it's valid, common Python.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "`*args`/`**kwargs` are most useful for wrapper/decorator functions and APIs that need to forward arbitrary arguments to another function (`return inner(*args, **kwargs)`), without needing to know or restate that function's exact parameter list.",
+    lesson:
+      "In a function signature, a parameter prefixed with `*` (conventionally named `args`) collects any extra positional arguments beyond the explicitly named ones into a tuple. A parameter prefixed with `**` (conventionally `kwargs`) collects any keyword arguments that don't match a named parameter into a dict. Explicitly named parameters (like `name` here) are matched first and don't end up duplicated inside `*args`/`**kwargs`.",
+  },
+  {
+    id: "q-py-context-001",
+    subject: "PYTHON",
+    concept: "Context Managers",
+    difficulty: "medium",
+    stem:
+      "Code does `f = open(\"data.txt\"); data = f.read(); process(data); f.close()`. If `process(data)` raises an exception, `f.close()` never runs and the file handle leaks until the process exits. A teammate suggests `with open(\"data.txt\") as f: data = f.read(); process(data)` instead. Why does this fix the leak?",
+    options: [
+      {
+        text: "A `with` block guarantees the context manager's `__exit__` method (which closes the file) runs when the block ends, whether it ends normally or via an exception propagating out — analogous to a guaranteed `finally`",
+        sub: "with statement guarantees cleanup via __exit__ regardless of exceptions",
+        fix: "",
+      },
+      {
+        text: "`with` blocks automatically catch and suppress any exception raised inside them, so `process(data)`'s exception never actually propagates",
+        sub: "Exception-suppression claim",
+        fix:
+          "By default, a `with` block does not swallow exceptions — they still propagate to the caller after `__exit__` runs (unless `__exit__` explicitly returns a truthy value to suppress them, which file objects don't do). The fix is about guaranteeing cleanup, not hiding the error.",
+      },
+      {
+        text: "Files opened with `with` use a faster, buffered read mode than files opened with plain `open()`",
+        sub: "Performance-mode claim",
+        fix:
+          "`with open(...)` and `open(...)` use the exact same file object and read mechanics; `with` changes only how reliably the file gets closed, not how it's read.",
+      },
+      {
+        text: "`with` reruns the entire block from the top if an exception occurs, which is why the file ends up closed on the second attempt",
+        sub: "Automatic-retry claim",
+        fix:
+          "A `with` block doesn't retry or re-execute anything on exception — it runs `__exit__` exactly once as the block is exited (by any means) and then lets the exception continue propagating, with no looping behavior.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Use `with` for any resource that needs guaranteed cleanup — files, locks, network connections, database transactions — anywhere you'd otherwise need a manual `try/finally`. It's Python's structural answer to the same problem C++'s RAII solves.",
+    lesson:
+      "A context manager defines `__enter__` (run when entering the `with` block) and `__exit__` (run when leaving it, for *any* reason — normal completion, `return`, `break`, or an exception unwinding through it). File objects implement this protocol so `with open(...) as f:` guarantees `f.close()` runs on every exit path, eliminating the class of bug where an exception causes manual cleanup code to be skipped. It's conceptually the same guarantee that C++ RAII destructors provide, just expressed through an explicit protocol instead of object lifetime.",
+  },
+  {
+    id: "q-py-mro-001",
+    subject: "PYTHON",
+    concept: "Method Resolution Order",
+    difficulty: "hard",
+    stem:
+      "`class A: def greet(self): return \"A\"`, `class B(A): def greet(self): return \"B\"`, `class C(A): def greet(self): return \"C\"`, `class D(B, C): pass`. Calling `D().greet()` returns `\"B\"`, not `\"A\"` and not some ambiguous error, even though `D` inherits from both `B` and `C`, which both inherit from `A`. What determines this?",
+    options: [
+      {
+        text: "Python computes a single, deterministic Method Resolution Order (MRO) for `D` via the C3 linearization algorithm — here `[D, B, C, A, object]` — and looks up `greet` by walking that list in order, finding it first on `B`",
+        sub: "C3 linearization produces one deterministic, consistent MRO",
+        fix: "",
+      },
+      {
+        text: "Python picks whichever parent class was defined first in the source file overall, regardless of the order listed in `class D(B, C)`",
+        sub: "Source-order-overall claim",
+        fix:
+          "The relevant order is the order of base classes listed in the class definition itself (`B` before `C` in `class D(B, C)`), not their order of definition elsewhere in the file — swapping to `class D(C, B)` would flip the result to `\"C\"`.",
+      },
+      {
+        text: "This raises a `TypeError` at class-definition time because diamond inheritance is disallowed in Python",
+        sub: "Diamond-inheritance-banned claim",
+        fix:
+          "Python explicitly supports diamond-shaped multiple inheritance and resolves it deterministically via MRO/C3 linearization — it's a designed, documented feature, not a forbidden pattern that errors out.",
+      },
+      {
+        text: "The result is non-deterministic — Python picks B or C at random each time `D().greet()` is called, and it just happened to return \"B\" this time",
+        sub: "Randomness claim",
+        fix:
+          "The MRO is computed once when the class is defined and is completely deterministic and stable across calls — `D().greet()` will return `\"B\"` every single time, not by chance.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "You can always check a class's exact resolution order yourself with `D.__mro__` or `D.mro()` rather than reasoning about it from the class hierarchy diagram — it removes any ambiguity about which parent 'wins' for diamond inheritance.",
+    lesson:
+      "When a class has multiple base classes, Python doesn't search them in some ad hoc or depth-first way that could revisit a shared ancestor multiple times or hit ambiguity — it computes one linear Method Resolution Order via the C3 linearization algorithm, respecting both each base's own MRO and the order bases were listed in the subclass. For `class D(B, C)` with both deriving from `A`, the MRO is `[D, B, C, A, object]`: attribute/method lookup walks this list and returns the first match, so `B`'s `greet` wins over `C`'s and `A`'s simply because `B` appears first in `D`'s declared base list.",
+  },
+  {
+    id: "q-py-classmethod-001",
+    subject: "PYTHON",
+    concept: "classmethod vs staticmethod",
+    difficulty: "medium",
+    stem:
+      "A `User` class needs a `from_csv_row(row)` constructor-style helper that builds a `User` from a CSV row, and must also work correctly for any subclass like `AdminUser` (i.e., `AdminUser.from_csv_row(row)` should return an `AdminUser`, not a `User`). Should this be a `@staticmethod` or a `@classmethod`?",
+    options: [
+      {
+        text: "`@classmethod`, because it receives the class it was called on (`cls`) as its first argument, so it can do `return cls(...)` and automatically construct the correct subclass when called via `AdminUser.from_csv_row(...)`",
+        sub: "classmethod receives cls and can build the calling subclass",
+        fix: "",
+      },
+      {
+        text: "`@staticmethod`, because it doesn't need access to any instance, and an instance is exactly what `staticmethod` provides instead of `cls`",
+        sub: "Mischaracterizes what staticmethod provides",
+        fix:
+          "`@staticmethod` provides neither `self` nor `cls` — it's just a plain function namespaced inside the class, with no automatic information about which class or instance it was called through. That's exactly why it can't automatically know to build an `AdminUser` versus a `User`.",
+      },
+      {
+        text: "Either works identically for this use case since both are called the same way: `User.from_csv_row(row)`",
+        sub: "Equivalence claim",
+        fix:
+          "They're called the same way syntactically, but a `@staticmethod` version would have to hardcode `return User(...)`, which would still return a `User` even when called as `AdminUser.from_csv_row(...)` — failing the subclass requirement. Only `@classmethod`'s `cls` parameter solves that.",
+      },
+      {
+        text: "Neither — Python requires constructor-style helpers to be written as `__init__` overrides, not separate methods",
+        sub: "init-override-required claim",
+        fix:
+          "Alternative constructors as classmethods (the 'factory method' pattern, like `dict.fromkeys` in the standard library) are common, idiomatic Python and don't require touching `__init__` at all.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "A good rule of thumb: use `@staticmethod` for a utility function that's logically grouped with the class but doesn't need `self` or `cls` at all; use `@classmethod` when the method needs to know or construct *the class itself*, especially for alternate constructors that should respect subclassing.",
+    lesson:
+      "`@staticmethod` defines a plain function attached to a class's namespace — it receives no implicit first argument, not `self` (instance) nor `cls` (class). `@classmethod` receives `cls`, the class it was actually called through, as its first argument; when called via a subclass, `cls` is that subclass, not the class where the method was defined. This makes `@classmethod` the right tool for factory/alternate-constructor methods, since `cls(...)` inside the method constructs whichever class was used to call it, correctly supporting subclasses without any extra logic.",
+  },
+  {
+    id: "q-py-gc-001",
+    subject: "PYTHON",
+    concept: "Garbage Collection",
+    difficulty: "hard",
+    stem:
+      "Two objects, `a` and `b`, reference each other (`a.partner = b; b.partner = a`), and then all other references to them go out of scope. A developer worried about C++-style manual memory management asks whether this leaks memory in Python. What actually happens?",
+    options: [
+      {
+        text: "CPython's reference counting alone wouldn't collect them (each keeps the other's count above zero), but CPython also runs a separate generational cyclic garbage collector that specifically detects and frees reference cycles like this one",
+        sub: "Reference counting handles non-cyclic garbage; a separate cycle detector handles cycles",
+        fix: "",
+      },
+      {
+        text: "This always leaks in Python, just like the equivalent `shared_ptr` cycle in C++, because Python's memory management is fundamentally the same reference-counting-only scheme",
+        sub: "Same-as-C++-shared_ptr claim",
+        fix:
+          "Unlike a raw `shared_ptr` cycle, CPython doesn't rely on reference counting alone — it has a dedicated cyclic garbage collector (the `gc` module) precisely to find and reclaim groups of objects whose reference counts never reach zero solely because they reference each other.",
+      },
+      {
+        text: "Python avoids the problem entirely because objects are not allowed to reference each other circularly — this code would raise an error",
+        sub: "Disallowed-cycle claim",
+        fix:
+          "Circular references between Python objects are completely legal and common (e.g., parent/child object graphs, doubly linked lists) — they don't raise any error at creation or assignment time.",
+      },
+      {
+        text: "The cycle is only cleaned up if the developer explicitly calls `del a; del b`, since Python never reclaims memory automatically",
+        sub: "Manual-del-required claim",
+        fix:
+          "Python's reference counting reclaims most garbage fully automatically the instant a count hits zero, no `del` required. For cycles specifically, the generational `gc` collector runs automatically (periodically, based on allocation thresholds) — manual `del` isn't required either, though `gc.collect()` can force an immediate pass.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Reference cycles in Python are usually not a leak risk thanks to the cyclic GC, but if you're managing non-memory resources (file handles, sockets) inside cyclically-referenced objects, don't rely on `__del__` timing — use explicit `close()`/context managers, since cyclic collection timing is less predictable than refcounting-based collection.",
+    lesson:
+      "CPython primarily reclaims memory via reference counting: every object tracks how many references point to it, and is freed the instant that count hits zero. This alone can't collect reference cycles, since each object in the cycle keeps another's count above zero indefinitely. CPython solves this with a separate, generational cycle-detecting garbage collector (exposed via the `gc` module) that periodically scans for groups of objects unreachable from outside the group except through each other, and frees them as a batch — meaning ordinary reference cycles, unlike raw-pointer or `shared_ptr` cycles in lower-level languages, generally don't leak in long-running Python programs.",
   },
 ];
 

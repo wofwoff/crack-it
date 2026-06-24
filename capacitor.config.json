@@ -1,9 +1,9 @@
 {
   "appId": "com.wafi.placementprep",
-  "appName": "PlacementPrep",
+  "appName": "Cracked",
   "webDir": "dist",
   "ios": {
-    "contentInset": "automatic",
+    "contentInset": "never",
     "allowsLinkPreview": false
   }
 }

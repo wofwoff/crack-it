@@ -1,10 +1,10 @@
 # iOS Build Notes
 
-PlacementPrep is wrapped with Capacitor for iOS.
+Cracked is wrapped with Capacitor for iOS.
 
 ## App Metadata
 
-- App name: `PlacementPrep`
+- App name: `Cracked`
 - Bundle identifier: `com.wafi.placementprep`
 - Web bundle: `dist`
 - Native project: `ios/App/App.xcodeproj`

@@ -23,12 +23,14 @@ import { QUESTIONS, DSA_PROMPTS } from "./content";
 
 const STORAGE_KEY = "placement-prep-v2";
 const STATE_SCHEMA_VERSION = 3;
-const SUBJECTS = ["DBMS", "OS", "CN", "OOP"];
+const SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON"];
 const SUBJECT_META = {
   DBMS: { name: "DBMS", detail: "Transactions, indexes, normalization", accent: "#c87a28" },
   OS: { name: "OS", detail: "CPU, memory, locks, deadlocks", accent: "#d65a4a" },
   CN: { name: "CN", detail: "TCP/IP, TLS, HTTP, DNS", accent: "#2e8f82" },
   OOP: { name: "OOP", detail: "SOLID, patterns, design tradeoffs", accent: "#6e78d8" },
+  CPP: { name: "C++", detail: "Memory, references, STL, RAII", accent: "#4a5a8f" },
+  PYTHON: { name: "Python", detail: "GIL, mutability, generators, scoping", accent: "#3d7a4f" },
   DSA: { name: "DSA", detail: "Algorithm logic and complexity", accent: "#1a1714" },
 };
 const COURSE_OPTIONS = [
@@ -54,6 +56,18 @@ const COURSE_OPTIONS = [
     id: "OOP",
     title: "OOP & Design",
     subtitle: "SOLID, patterns, composition, coupling",
+    type: "mcq",
+  },
+  {
+    id: "CPP",
+    title: "C++",
+    subtitle: "Memory, references, STL, RAII, ownership",
+    type: "mcq",
+  },
+  {
+    id: "PYTHON",
+    title: "Python",
+    subtitle: "GIL, mutability, generators, scoping, decorators",
     type: "mcq",
   },
   {
@@ -245,6 +259,19 @@ function composeDailySet(settings, conceptState) {
   };
 }
 
+function composeSubjectPracticeSet(subject, conceptState) {
+  const today = dateKey();
+  const subjectQuestions = QUESTIONS.filter((question) => question.subject === subject);
+  return [...subjectQuestions].sort((a, b) => {
+    const aState = conceptState[questionConceptKey(a)] || {};
+    const bState = conceptState[questionConceptKey(b)] || {};
+    const aDue = (aState.dueAt || today) <= today ? 0 : 1;
+    const bDue = (bState.dueAt || today) <= today ? 0 : 1;
+    if (aDue !== bDue) return aDue - bDue;
+    return (aState.mastery || 0) - (bState.mastery || 0);
+  });
+}
+
 function nextDsaPrompt(settings, conceptState, attempts) {
   const hasDsa = settings.selectedCourses?.includes("DSA");
   if (!hasDsa) return null;
@@ -314,6 +341,11 @@ export function App() {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [cardSide, setCardSide] = useState("front");
   const [lessonQuestionId, setLessonQuestionId] = useState(null);
+  const [lessonOrigin, setLessonOrigin] = useState("question");
+  const [practiceSubject, setPracticeSubject] = useState(null);
+  const [practiceIndex, setPracticeIndex] = useState(0);
+  const [practiceSelectedIndex, setPracticeSelectedIndex] = useState(null);
+  const [practiceCardSide, setPracticeCardSide] = useState("front");
 
   useEffect(() => {
     setAppState((state) => {
@@ -360,7 +392,9 @@ export function App() {
     return ids.map((id) => QUESTIONS.find((question) => question.id === id)).filter(Boolean);
   }, [appState.dailySet]);
 
-  const todayAttempts = appState.attempts.filter((attempt) => attempt.date === dateKey());
+  const todayAttempts = appState.attempts.filter(
+    (attempt) => attempt.date === dateKey() && (attempt.source || "daily") === "daily",
+  );
   const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
   const completedCount = new Set(todayAttempts.map((attempt) => attempt.questionId)).size;
   const currentQuestion = todaySet[currentIndex] || todaySet[0] || QUESTIONS[0];
@@ -384,6 +418,26 @@ export function App() {
             100,
         );
 
+  const practiceSet = useMemo(
+    () => (practiceSubject ? composeSubjectPracticeSet(practiceSubject, appState.conceptState) : []),
+    [practiceSubject, appState.conceptState],
+  );
+  const practiceAttemptsToday = appState.attempts.filter(
+    (attempt) => attempt.date === dateKey() && attempt.source === "practice",
+  );
+  const currentPracticeQuestion = practiceSet[practiceIndex] || practiceSet[0];
+  const currentPracticeAttempt =
+    currentPracticeQuestion &&
+    practiceAttemptsToday.find((attempt) => attempt.questionId === currentPracticeQuestion.id);
+  const practiceResponseOutcome =
+    !currentPracticeQuestion || practiceSelectedIndex === null
+      ? null
+      : practiceSelectedIndex === -1
+        ? "blank"
+        : practiceSelectedIndex === currentPracticeQuestion.correctIndex
+          ? "correct"
+          : "wrong";
+
   function resetQuestionUi(nextIndex = currentIndex) {
     setCurrentIndex(nextIndex);
     setSelectedIndex(null);
@@ -402,10 +456,13 @@ export function App() {
     setView("question");
   }
 
-  function recordAttempt(question, outcome, optionIndex) {
+  function recordAttempt(question, outcome, optionIndex, source = "daily") {
     setAppState((state) => {
       const existing = state.attempts.some(
-        (attempt) => attempt.date === dateKey() && attempt.questionId === question.id,
+        (attempt) =>
+          attempt.date === dateKey() &&
+          attempt.questionId === question.id &&
+          (attempt.source || "daily") === source,
       );
       if (existing) return state;
 
@@ -430,6 +487,7 @@ export function App() {
             subject: question.subject,
             outcome,
             optionIndex,
+            source,
             respondedAt: new Date().toISOString(),
           },
         ],
@@ -491,9 +549,52 @@ export function App() {
     resetQuestionUi(nextIndex);
   }
 
-  function openLesson(questionId = currentQuestion.id) {
+  function openLesson(questionId = currentQuestion.id, origin = "question") {
     setLessonQuestionId(questionId);
+    setLessonOrigin(origin);
     setView("lesson");
+  }
+
+  function startPractice(subject) {
+    setPracticeSubject(subject);
+    setPracticeIndex(0);
+    setPracticeSelectedIndex(null);
+    setPracticeCardSide("front");
+    setView("practice");
+  }
+
+  function choosePracticeOption(index) {
+    if (!currentPracticeQuestion || practiceSelectedIndex !== null || currentPracticeAttempt) return;
+    setPracticeSelectedIndex(index);
+    recordAttempt(
+      currentPracticeQuestion,
+      index === currentPracticeQuestion.correctIndex ? "correct" : "wrong",
+      index,
+      "practice",
+    );
+  }
+
+  function blankOutPractice() {
+    if (!currentPracticeQuestion || practiceSelectedIndex !== null || currentPracticeAttempt) return;
+    setPracticeSelectedIndex(-1);
+    setPracticeCardSide("back");
+    recordAttempt(currentPracticeQuestion, "blank", null, "practice");
+  }
+
+  function nextPracticeQuestion() {
+    const nextIndex = practiceIndex + 1;
+    if (nextIndex >= practiceSet.length) {
+      setView("practice-summary");
+      return;
+    }
+    setPracticeIndex(nextIndex);
+    setPracticeSelectedIndex(null);
+    setPracticeCardSide("front");
+  }
+
+  function exitPractice() {
+    setPracticeSubject(null);
+    setView("practice-setup");
   }
 
   function completeCourseSetup(selectedCourses, dailyGoal = appState.settings.dailyGoal) {
@@ -615,7 +716,7 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="app-frame" aria-label="PlacementPrep application">
+      <section className="app-frame" aria-label="Cracked application">
         {appState.hasCompletedCourseSetup && view !== "setup" && (
           <FrameTop
             view={view}
@@ -749,10 +850,7 @@ function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnable
       <header className="frame-top">
         <button className="brand-button" onClick={() => setView("today")}>
           <span className="brand-mark">PP</span>
-          <span>
-            <span className="eyebrow">PlacementPrep</span>
-            <span className="brand-title">Open Book</span>
-          </span>
+          <span className="eyebrow">Cracked</span>
         </button>
         <nav className="top-nav top-nav-desktop" aria-label="Main navigation">
           {navButtons}
@@ -795,7 +893,7 @@ function CourseSetupView({ selectedCourses, onComplete }) {
           <span />
           <span />
         </div>
-        <p className="eyebrow">PlacementPrep setup</p>
+        <p className="eyebrow">Cracked setup</p>
         <h1>Set up your prep.</h1>
         <p>
           Choose the subjects, daily pace, and DSA mode that should appear in
@@ -927,7 +1025,7 @@ function TodayView({
     <div className="screen today-screen view-enter">
       <section className="hero-row">
         <div>
-          <p className="eyebrow">PlacementPrep</p>
+          <p className="eyebrow">Cracked</p>
           <h1>Good morning.</h1>
         </div>
         <p className="date-label">{readableDate()}</p>
