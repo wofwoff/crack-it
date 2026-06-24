@@ -6,4 +6,4 @@ Before making substantial visual changes, use the Product Design plugin's `get-c
 
 When implementing from a selected generated mock, treat that image as the source of truth for layout, component anatomy, density, spacing, color, typography, visible content, and hierarchy.
 
-Durable design decision: use Option C, "Stacked Cards Mark", from `Logo Exploration.html` as the iOS app icon direction for Cracked.
+Durable design decision: use Option D, "Flame Mark", from `Logo Exploration.html` as the iOS app icon direction for Cracked.

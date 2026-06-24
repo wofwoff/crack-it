@@ -330,6 +330,18 @@ function updateMemoryState(previous, outcome) {
   };
 }
 
+function FlameMark({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 21 21" aria-hidden="true">
+      <path
+        d="M9 0C9 0 11.5 6 8 9.5C8 9.5 5.5 7 3.5 8.5C3.5 8.5 0 14.5 7.5 18.5C7.5 18.5 5.5 16 8 14.5C8 14.5 9.5 21 14 21C14 21 19 18.5 19 12C19 6 14.5 9.5 14.5 9.5C14.5 9.5 17 4.5 13 2.5C13 2.5 13 7 11 7C11 7 13.5 1 9 0Z"
+        fill="currentColor"
+        transform="translate(-0.342 0)"
+      />
+    </svg>
+  );
+}
+
 function classNames(...values) {
   return values.filter(Boolean).join(" ");
 }
@@ -556,8 +568,19 @@ export function App() {
   }
 
   function startPractice(subject) {
+    const subjectSet = composeSubjectPracticeSet(subject, appState.conceptState);
+    const attemptsToday = appState.attempts.filter(
+      (attempt) => attempt.date === dateKey() && attempt.source === "practice",
+    );
+    const firstUnanswered = subjectSet.findIndex(
+      (question) => !attemptsToday.some((attempt) => attempt.questionId === question.id),
+    );
     setPracticeSubject(subject);
-    setPracticeIndex(0);
+    if (firstUnanswered === -1) {
+      setView("practice-summary");
+      return;
+    }
+    setPracticeIndex(firstUnanswered);
     setPracticeSelectedIndex(null);
     setPracticeCardSide("front");
     setView("practice");
@@ -749,6 +772,7 @@ export function App() {
             startSession={startSession}
             startDsa={() => setView("dsa")}
             openProgress={() => setView("progress")}
+            openPractice={() => setView("practice-setup")}
           />
         )}
 
@@ -779,10 +803,50 @@ export function App() {
           />
         )}
 
+        {appState.hasCompletedCourseSetup && view === "practice-setup" && (
+          <PracticeSetupView conceptState={appState.conceptState} startPractice={startPractice} />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "practice" && (
+          <QuestionView
+            question={currentPracticeQuestion}
+            total={practiceSet.length}
+            currentIndex={practiceIndex}
+            selectedIndex={practiceSelectedIndex}
+            cardSide={practiceCardSide}
+            responseOutcome={practiceResponseOutcome}
+            chooseOption={choosePracticeOption}
+            blankOut={blankOutPractice}
+            flip={() => setPracticeCardSide("back")}
+            nextQuestion={nextPracticeQuestion}
+            openLesson={(questionId) => openLesson(questionId, "practice")}
+            goToday={exitPractice}
+            backLabel="Practice"
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "practice-summary" && (
+          <PracticeSummaryView
+            subject={practiceSubject}
+            practiceSet={practiceSet}
+            attempts={practiceAttemptsToday}
+            goPracticeSetup={() => setView("practice-setup")}
+            goToday={() => setView("today")}
+          />
+        )}
+
         {appState.hasCompletedCourseSetup && view === "lesson" && (
           <LessonView
             question={QUESTIONS.find((item) => item.id === lessonQuestionId) || currentQuestion}
-            onBack={() => setView(cardSide === "back" ? "question" : "today")}
+            onBack={() =>
+              setView(
+                lessonOrigin === "practice"
+                  ? "practice"
+                  : cardSide === "back"
+                    ? "question"
+                    : "today",
+              )
+            }
           />
         )}
 
@@ -825,35 +889,45 @@ export function App() {
 }
 
 function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnabled }) {
-  const navItems = [
+  const baseNavItems = [
     { id: "today", label: "Today", icon: Home },
     ...(dsaEnabled ? [{ id: "dsa", label: "DSA", icon: Code2 }] : []),
+    { id: "practice-setup", label: "Practice", icon: BookOpen },
     { id: "progress", label: "Progress", icon: BarChart3 },
     { id: "settings", label: "Settings", icon: Settings },
   ];
-  const navButtons = navItems.map((item) => {
-    const Icon = item.icon;
-    return (
-      <button
-        key={item.id}
-        className={classNames("nav-button", view === item.id && "active")}
-        onClick={() => setView(item.id)}
-      >
-        <Icon size={16} aria-hidden="true" />
-        <span>{item.label}</span>
-      </button>
-    );
-  });
+  const mobileNavItems = baseNavItems.filter((item) => item.id !== "dsa");
+
+  function renderNavButtons(items) {
+    return items.map((item) => {
+      const Icon = item.icon;
+      const isActive =
+        view === item.id ||
+        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary"));
+      return (
+        <button
+          key={item.id}
+          className={classNames("nav-button", isActive && "active")}
+          onClick={() => setView(item.id)}
+        >
+          <Icon size={16} aria-hidden="true" />
+          <span>{item.label}</span>
+        </button>
+      );
+    });
+  }
 
   return (
     <>
       <header className="frame-top">
         <button className="brand-button" onClick={() => setView("today")}>
-          <span className="brand-mark">PP</span>
+          <span className="brand-mark">
+            <FlameMark size={18} />
+          </span>
           <span className="eyebrow">Cracked</span>
         </button>
         <nav className="top-nav top-nav-desktop" aria-label="Main navigation">
-          {navButtons}
+          {renderNavButtons(baseNavItems)}
         </nav>
         <div className="top-stats">
           <span>{completedCount} / {totalCount || 0}</span>
@@ -863,7 +937,7 @@ function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnable
         </div>
       </header>
       <nav className="top-nav mobile-tabbar" aria-label="Mobile navigation">
-        {navButtons}
+        {renderNavButtons(mobileNavItems)}
       </nav>
     </>
   );
@@ -1003,6 +1077,7 @@ function TodayView({
   startSession,
   startDsa,
   openProgress,
+  openPractice,
 }) {
   const total = todaySet.length;
   const totalAtoms = total + (dsaEnabled ? 1 : 0);
@@ -1114,7 +1189,10 @@ function TodayView({
       <section className="mix-section">
         <div className="section-heading">
           <p className="eyebrow">Today's mix</p>
-          <button className="text-button" onClick={openProgress}>View mastery</button>
+          <div className="section-heading-actions">
+            <button className="text-button" onClick={openPractice}>Practice by topic</button>
+            <button className="text-button" onClick={openProgress}>View mastery</button>
+          </div>
         </div>
         <div className="mix-list">
           {mix.map((item) => (
@@ -1161,6 +1239,7 @@ function QuestionView({
   nextQuestion,
   openLesson,
   goToday,
+  backLabel = "Today",
 }) {
   const answered = selectedIndex !== null;
   const isCorrect = responseOutcome === "correct";
@@ -1176,7 +1255,7 @@ function QuestionView({
       <div className="question-top">
         <button className="ghost-button compact" onClick={goToday}>
           <ChevronLeft size={16} aria-hidden="true" />
-          Today
+          {backLabel}
         </button>
         <div className="question-context">
           <span className="pill neutral">{question.subject}</span>
@@ -1626,6 +1705,65 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
           <button className="ghost-button" onClick={goToday}>Back to today</button>
           <button className="primary-button" onClick={openProgress}>
             Open progress
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+function PracticeSetupView({ conceptState, startPractice }) {
+  const subjectCards = SUBJECTS.map((subject) => {
+    const meta = SUBJECT_META[subject];
+    const concepts = uniqueMcqConceptsForSubject(subject);
+    const mastery = concepts.length
+      ? Math.round(concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length)
+      : 0;
+    return { subject, meta, mastery, questionCount: QUESTIONS.filter((q) => q.subject === subject).length };
+  });
+
+  return (
+    <div className="screen practice-setup-screen">
+      <header className="screen-header">
+        <p className="eyebrow">Practice by topic</p>
+        <h1>Pick a course to drill.</h1>
+        <p className="screen-subtitle">Run through every question in one subject, outside the daily set.</p>
+      </header>
+      <div className="practice-subject-grid">
+        {subjectCards.map(({ subject, meta, mastery, questionCount }) => (
+          <button key={subject} className="practice-subject-card" onClick={() => startPractice(subject)}>
+            <div className="practice-subject-card-top">
+              <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
+                {meta.name}
+              </span>
+              <span className="practice-subject-mastery">{mastery}%</span>
+            </div>
+            <p className="practice-subject-detail">{meta.detail}</p>
+            <span className="practice-subject-count">{questionCount} questions</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, goToday }) {
+  const meta = SUBJECT_META[subject] || { name: subject };
+  const correct = attempts.filter((attempt) => attempt.outcome === "correct").length;
+
+  return (
+    <div className="screen summary-screen">
+      <article className="summary-paper">
+        <p className="eyebrow">Practice complete</p>
+        <h1>{meta.name} session done.</h1>
+        <p className="summary-lede">
+          {correct} of {practiceSet.length} correct. These attempts updated your mastery but didn't touch your streak.
+        </p>
+        <div className="summary-actions">
+          <button className="ghost-button" onClick={goToday}>Back to today</button>
+          <button className="primary-button" onClick={goPracticeSetup}>
+            Practice another topic
             <ChevronRight size={16} aria-hidden="true" />
           </button>
         </div>
