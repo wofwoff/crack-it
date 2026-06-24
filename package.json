@@ -1,0 +1,28 @@
+{
+  "name": "placement-prep-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "ios:assets": "node scripts/generate-ios-assets.mjs",
+    "ios:prepare": "npm run build && npm run ios:assets && npx cap copy ios",
+    "ios:sync": "npm run build && npm run ios:assets && npx cap sync ios",
+    "ios:open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
+    "@vitejs/plugin-react": "5.0.4",
+    "lucide-react": "^1.21.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  }
+}

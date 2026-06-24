@@ -1,0 +1,9 @@
+{
+  "appId": "com.wafi.placementprep",
+  "appName": "PlacementPrep",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic",
+    "allowsLinkPreview": false
+  }
+}

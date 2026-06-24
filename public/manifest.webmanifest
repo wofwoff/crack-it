@@ -1,0 +1,10 @@
+{
+  "name": "PlacementPrep",
+  "short_name": "Prep",
+  "description": "Daily retrieval-practice app for placement prep.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf8f4",
+  "theme_color": "#faf8f4",
+  "orientation": "portrait"
+}
