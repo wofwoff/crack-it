@@ -6,3 +6,5 @@ dist/
 build/
 ios/build/
 qa-artifacts/
+.env
+.env.local

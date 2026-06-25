@@ -1,7 +1,7 @@
 // Content bank for Cracked.
 // Each MCQ: { id, subject, concept, difficulty, stem, options[{text, sub, fix}], correctIndex, proTip, lesson }
 // The correct option keeps fix: "". Every distractor explains why it is wrong in `fix`.
-// Subjects: DBMS, OS, CN, OOP. DSA prompts are self-graded logic drills.
+// Subjects: DBMS, OS, CN, OOP, CPP, PYTHON, OA. DSA prompts are self-graded logic drills.
 
 export const QUESTIONS = [
   // ----------------------------------------------------------------------------
@@ -44,6 +44,8 @@ export const QUESTIONS = [
       "Non-repeatable reads sit in the middle of SQL's isolation hierarchy. Raising from Read Committed to Repeatable Read usually gives each transaction a stable view of rows it has already read.",
     lesson:
       "A non-repeatable read happens when the same transaction reads the same row twice and gets different values because another committed transaction changed it in between. Dirty reads are about uncommitted data, phantom reads are about new rows in a repeated range query, and lost updates are about competing writes.",
+    remember: "Non-repeatable read = same row, two different values across reads in one transaction; phantom read = new rows appear in a repeated range query.",
+    interviewAnswer: "This is a non-repeatable read — the transaction reads the same account row twice, and a committed change in between gives it two different values. It's different from a dirty read because the other transaction had already committed before the second read, and it's different from a phantom because no new rows appeared, just a changed value on an existing row. Bumping isolation from Read Committed to Repeatable Read locks in the row's value for the duration of the transaction so this can't happen.",
   },
   {
     id: "q-dbms-iso-002",
@@ -82,6 +84,8 @@ export const QUESTIONS = [
       "Phantoms are about set membership, not row values. Serializable (often via predicate/range locks or serialization checks) is the standard level that eliminates them.",
     lesson:
       "A phantom read occurs when a transaction re-runs a range or predicate query and sees rows that were inserted (or deleted) by another committed transaction. The SQL standard only guarantees phantoms are prevented at Serializable isolation. Many engines use range locks or serializable snapshot isolation to enforce it.",
+    remember: "Phantoms are about rows appearing or disappearing from a range query, not values changing — and only Serializable reliably blocks them.",
+    interviewAnswer: "This is a phantom read because the second COUNT(*) picks up brand-new rows that didn't exist during the first read, rather than an existing row changing value. Repeatable Read locks the rows you've already touched, but it doesn't stop new rows from satisfying your predicate, so you need Serializable, which uses range or predicate locks to prevent inserts that would match a query you've already run. That's the key distinction interviewers look for: phantoms are about set membership, non-repeatable reads are about row values.",
   },
   {
     id: "q-dbms-index-001",
@@ -120,6 +124,8 @@ export const QUESTIONS = [
       "Composite index order matters: equality filters first, then range or sort columns. That lets the engine narrow the scan and reuse index order instead of sorting a large result.",
     lesson:
       "Indexes trade write cost and storage for faster reads. For compound queries, the most useful index usually starts with the columns used in equality filters, then adds the column used for range scans or ordering. A covering index can also include projected columns, but it should be deliberate because every index slows writes.",
+    remember: "Composite index column order = equality filters first, then the range/sort column — match the access pattern, don't just index \"the most important\" column.",
+    interviewAnswer: "The fix is a composite index on (user_id, status, created_at DESC), because a composite B-tree index is only useful if its leading columns match your equality filters, and putting created_at last lets the database walk the index in already-sorted order instead of materializing and sorting the result set. An index on status alone barely helps since status is usually low-cardinality, and a hash index can't support range or order operations at all. The general rule is: equality columns first, then the column you sort or range-scan on.",
   },
   {
     id: "q-dbms-index-002",
@@ -158,6 +164,8 @@ export const QUESTIONS = [
       "Think of a composite index like a phone book sorted by last name then first name. You can't efficiently find everyone named 'Priya' without the last name, because the data isn't ordered by first name.",
     lesson:
       "A composite B-tree index is ordered left to right. It can satisfy queries that use a left-prefix of the key (last_name, or last_name+first_name), but not a query that filters only on a trailing column. To serve a first_name-only filter, you need an index with first_name as its leading column.",
+    remember: "A composite index is only usable through a left-to-right prefix of its columns — skip the leading column and the index is useless for that query.",
+    interviewAnswer: "A composite index on (last_name, first_name) is ordered first by last_name and only then by first_name, so it's like a phone book — you can jump straight to a last name, but you can't efficiently find everyone named \"Priya\" without scanning the whole structure, since first names aren't grouped together independent of last name. Because the query filters only on first_name, it skips the leading column, so the optimizer correctly decides the index can't help and falls back to a full scan. To support that query efficiently you'd need a separate index with first_name as the leading column.",
   },
   {
     id: "q-dbms-norm-001",
@@ -196,6 +204,8 @@ export const QUESTIONS = [
       "Update, insertion, and deletion anomalies are the classic symptoms that a table needs to be decomposed. Moving customer attributes into a Customers table keyed by customer_id removes the redundancy.",
     lesson:
       "Normalization removes redundancy by decomposing tables so each fact is stored once. When non-key attributes (like customer_email) depend on something other than the table's key and are duplicated across rows, you get update anomalies. Moving those attributes to a table keyed by what they actually depend on resolves it, typically reaching 2NF/3NF.",
+    remember: "Same non-key fact duplicated across many rows = update anomaly; the fix is always to move it into its own table keyed by what it depends on.",
+    interviewAnswer: "This is a classic update anomaly caused by storing redundant customer data directly on the Orders table — since customer_email is duplicated across every order row, updating it means touching every single row, and missing any of them leaves the data inconsistent. It's not a 1NF violation since each column is still atomic, and there's no broken foreign key involved. The fix is to normalize by pulling customer attributes into a Customers table keyed by customer_id, so each fact is stored exactly once.",
   },
   {
     id: "q-dbms-norm-002",
@@ -234,6 +244,8 @@ export const QUESTIONS = [
       "3NF says non-key columns must depend on the key, the whole key, and nothing but the key. zip_code -> city is a non-key-to-non-key (transitive) dependency, so split it into a ZipCodes(zip_code, city) table.",
     lesson:
       "Third normal form forbids transitive dependencies: a non-key attribute determining another non-key attribute. Since city depends on zip_code (a non-key attribute) rather than directly on student_id, the table is in 2NF but not 3NF. Extracting zip_code -> city into its own table removes the redundancy.",
+    remember: "3NF kills transitive dependencies (non-key to non-key); 2NF kills partial dependencies on part of a composite key — single-column keys can never violate 2NF.",
+    interviewAnswer: "This table violates third normal form because zip_code determines city, and zip_code itself is a non-key attribute — that's a transitive dependency, where a non-key column determines another non-key column instead of everything depending directly on the primary key. It can't be a 2NF violation since the primary key here is a single column, student_id, and 2NF only applies to composite keys. The fix is to extract zip_code and city into their own table, so city is derived through a join instead of being duplicated and risking inconsistency.",
   },
   {
     id: "q-dbms-acid-001",
@@ -272,6 +284,8 @@ export const QUESTIONS = [
       "Atomicity is enforced by the write-ahead log and rollback: uncommitted changes are undone on recovery so the transaction leaves no partial footprint.",
     lesson:
       "ACID stands for Atomicity, Consistency, Isolation, Durability. Atomicity guarantees a transaction is indivisible — either all its operations take effect or none do. If a crash occurs mid-transaction, recovery rolls back the incomplete work, which is exactly what prevented the orphaned debit.",
+    remember: "Atomicity = all-or-nothing per transaction (crash recovery rolls back partial work); Durability = once committed, it survives a crash.",
+    interviewAnswer: "This is atomicity — it guarantees a transaction is treated as a single indivisible unit, so if the system crashes before the credit to account B happens, the earlier debit from account A gets rolled back on recovery rather than leaving the system in a half-finished state. The database achieves this using its write-ahead log: uncommitted changes are undone during crash recovery, which is exactly the mechanism that erased the orphaned debit here. It's easy to confuse with consistency, but consistency is the outcome — atomicity is the actual all-or-nothing mechanism that produces it.",
   },
   {
     id: "q-dbms-acid-002",
@@ -310,6 +324,8 @@ export const QUESTIONS = [
       "Durability is typically implemented by flushing the write-ahead/redo log to stable storage before acknowledging commit, so recovery can replay it.",
     lesson:
       "Durability means that once a transaction is committed, its effects persist even through power loss or crashes. Databases achieve this by writing changes to a durable log before confirming the commit, then replaying the log on restart to ensure no acknowledged write is lost.",
+    remember: "Durability = once the commit is acknowledged, it survives a crash; the line that matters is \"before vs after commit,\" not \"single vs multiple operations.\"",
+    interviewAnswer: "This is durability — once the database tells the client the order was successfully placed, that commit must survive any subsequent crash or power loss. Under the hood, this typically works by flushing the write-ahead log to durable storage before acknowledging the commit, so on reboot the database can replay the log and recover that exact write. It's distinct from atomicity, which is about all-or-nothing execution during the transaction itself — here the transaction already finished and committed, so the only question is whether committed data persists.",
   },
   {
     id: "q-dbms-join-001",
@@ -348,6 +364,8 @@ export const QUESTIONS = [
       "A LEFT JOIN preserves every row from the left table. Unmatched right-side columns come back as NULL, which is exactly how you surface 'customers with no orders'.",
     lesson:
       "A LEFT OUTER JOIN returns all rows from the left table and the matching rows from the right table; where there is no match, right-side columns are NULL. An INNER JOIN returns only rows that match on both sides. Choose LEFT JOIN when you must keep every record from one table regardless of matches.",
+    remember: "LEFT JOIN keeps every row from the left table no matter what — unmatched columns from the right just come back NULL.",
+    interviewAnswer: "You'd use a LEFT OUTER JOIN from customers to orders, because a left join guarantees every row from the left table appears in the result, and any customer with no matching orders just gets NULLs in the order columns instead of being dropped. An inner join would silently exclude exactly the customers we care about — the ones with zero orders — since it only keeps rows that match on both sides. A right join would flip the problem, preserving every order but potentially losing customers, so the join direction and type both matter here.",
   },
   {
     id: "q-dbms-mvcc-001",
@@ -386,6 +404,8 @@ export const QUESTIONS = [
       "MVCC keeps multiple versions of a row. Readers get the version valid at their snapshot, so 'readers don't block writers and writers don't block readers' becomes possible.",
     lesson:
       "Multiversion concurrency control gives each transaction a consistent snapshot by retaining older row versions instead of overwriting in place. Readers see the version that was committed as of their snapshot, so they don't need read locks and don't block writers. This is how databases like Postgres provide snapshot isolation with high read concurrency.",
+    remember: "MVCC = readers see old row versions from their snapshot, so readers never block writers and writers never block readers.",
+    interviewAnswer: "This is multiversion concurrency control — instead of locking rows for reads, Postgres keeps multiple versions of each row, and a long-running SELECT just keeps reading the versions that were valid at the moment its snapshot started. That's why concurrent writers can keep updating those same rows freely; they're creating new versions rather than fighting over locks with the reader. It's a key contrast with strict two-phase locking, where a long read would take shared locks and actually block those writers for the whole duration.",
   },
   {
     id: "q-dbms-cap-001",
@@ -424,6 +444,8 @@ export const QUESTIONS = [
       "CAP is only a dilemma during a partition. Choosing to keep serving despite staleness is the classic AP stance; many systems offer tunable consistency to move along this spectrum.",
     lesson:
       "The CAP theorem states that during a network partition a distributed system can guarantee at most two of Consistency, Availability, and Partition tolerance. Since partitions are unavoidable, the real choice is between staying available (AP, risking stale reads) or staying consistent (CP, rejecting some requests).",
+    remember: "CAP only kicks in during a partition: CP refuses/blocks to stay consistent, AP keeps serving and accepts staleness — you can't pick all three at once.",
+    interviewAnswer: "By choosing to keep every node answering reads and writes during the partition, even with stale data, they're picking availability over consistency — that's the AP side of CAP. A CP system would instead reject or stall requests on the minority side of the partition to guarantee no one reads stale data. Since network partitions are unavoidable in a real distributed system, the actual decision you're always making is this consistency-versus-availability trade-off the moment a partition happens, not whether to support partition tolerance at all.",
   },
   {
     id: "q-dbms-shard-001",
@@ -462,6 +484,8 @@ export const QUESTIONS = [
       "Sharding distributes both data and write load by a shard key (e.g., user_id hash). Pick a key with even distribution to avoid hot shards, and remember cross-shard queries get harder.",
     lesson:
       "Sharding (horizontal partitioning) splits a large table's rows across multiple database nodes based on a shard key, so each node owns a subset of data and absorbs a fraction of the write load. It scales writes beyond one machine, at the cost of more complex cross-shard queries and transactions. Replication, by contrast, scales reads and improves availability.",
+    remember: "Replicas scale reads; sharding scales writes — sharding splits data across nodes by a shard key so each node absorbs only part of the write load.",
+    interviewAnswer: "The right move is horizontal sharding — partitioning the events table across multiple Postgres instances by a shard key like a hashed user_id, so each node only has to handle a fraction of the total write traffic. Read replicas wouldn't help here because all writes still funnel through a single primary; replicas only offload read queries. The trade-off with sharding is that cross-shard queries and transactions become much harder, so picking a shard key with even distribution and minimal cross-shard access patterns really matters.",
   },
   {
     id: "q-dbms-deadlock-001",
@@ -500,6 +524,8 @@ export const QUESTIONS = [
       "A consistent lock-acquisition order breaks the circular-wait condition. If every transaction grabs A before B, T1 and T2 can no longer hold one and wait on the other in a cycle.",
     lesson:
       "Database deadlocks arise when transactions acquire locks in opposite orders, creating a circular wait. Engines detect the cycle and abort a victim. The durable fix is to impose a consistent global lock ordering so cycles cannot form; shorter transactions and lower lock scope also reduce the window.",
+    remember: "Deadlocks come from circular wait due to inconsistent lock ordering — the durable fix is a global, consistent lock-acquisition order, not stronger isolation.",
+    interviewAnswer: "The real cause here is that T1 locks A then waits on B while T2 locks B then waits on A, forming a circular wait — that's a textbook deadlock, and the database's detector just picks a victim to abort. Raising isolation to Serializable doesn't fix this; it can actually make locking contention worse, since the problem is purely about the order locks are acquired, not how strict the isolation guarantees are. The reliable fix is enforcing a consistent global ordering, like always locking the lower-numbered row first, so a cycle like this can never form again.",
   },
   {
     id: "q-dbms-denorm-001",
@@ -538,6 +564,8 @@ export const QUESTIONS = [
       "Denormalization trades write complexity and storage for read speed. Once data is duplicated, you must keep copies in sync — often via triggers, application logic, or async jobs.",
     lesson:
       "Denormalization deliberately introduces redundancy (duplicated columns or precomputed aggregates) to avoid expensive joins and speed up reads. The trade-off is that every duplicate must be updated together, risking inconsistency. It's a common, valid optimization for read-heavy workloads when applied carefully.",
+    remember: "Denormalization trades write complexity/storage for read speed by duplicating data — the cost is always keeping the copies in sync.",
+    interviewAnswer: "This is denormalization — they're deliberately duplicating a few frequently-read fields onto the product row so reads don't have to join six tables every time, which is the opposite of normalization's goal of storing each fact once. The upside is a big win in read latency under heavy traffic, but the real risk is that now there are multiple copies of the same data that all have to be kept in sync, usually through triggers, application-level updates, or async jobs. It's a legitimate, common optimization for read-heavy systems, but it has to be applied deliberately because every duplicate is a place data can drift out of sync.",
   },
   {
     id: "q-dbms-keys-001",
@@ -576,6 +604,8 @@ export const QUESTIONS = [
       "Foreign keys enforce referential integrity: the database rejects child rows pointing at non-existent parents and can cascade updates or deletes.",
     lesson:
       "A foreign key constraint ties a column to a key in another table and guarantees referential integrity — you cannot insert a child row whose foreign key has no matching parent, and you cannot orphan children by deleting a referenced parent (unless cascading is configured). UNIQUE, NOT NULL, and CHECK enforce different, row-local rules.",
+    remember: "FOREIGN KEY enforces referential integrity (value must exist elsewhere); UNIQUE stops duplicates; NOT NULL stops empties; CHECK validates row-local conditions — none of the other three can verify cross-table existence.",
+    interviewAnswer: "The constraint that actually prevents this is a foreign key on customer_id referencing Customers, because a foreign key is the only constraint that checks whether a value exists in another table — it rejects any insert where the referenced row doesn't exist. UNIQUE just prevents duplicate values within the same column, NOT NULL just blocks empty values, and CHECK only validates conditions using the row's own data, so none of those three would catch a non-null, valid-looking customer_id that simply doesn't correspond to a real customer. Referential integrity specifically is the foreign key's job.",
   },
   {
     id: "q-dbms-query-001",
@@ -614,6 +644,8 @@ export const QUESTIONS = [
       "A sequential scan that returns a tiny fraction of rows is a classic 'missing index' signal. A B-tree index on the equality column turns O(n) scanning into an O(log n) lookup; the trade-off is marginally slower inserts/updates.",
     lesson:
       "Query optimization starts with reading the execution plan. A Seq Scan returning a small selective result on an equality predicate indicates a missing index. Adding a B-tree index on the filtered column lets the planner do an index lookup instead of scanning every row. The cost is extra storage and slightly slower writes, since the index must be maintained.",
+    remember: "Seq Scan reading millions of rows to return a handful on an equality filter is the textbook \"missing index\" smell — add a B-tree index, pay a small write cost.",
+    interviewAnswer: "The plan is showing a sequential scan reading 5 million rows to find just 12 matches on an equality predicate, which is the classic signature of a missing index — there's no faster way to locate scattered matching rows without one. Adding a B-tree index on email turns that into a fast O(log n) lookup instead of an O(n) scan, at the cost of slightly slower writes since the index has to be maintained on every insert or update. Changing the projection with SELECT * or tuning work_mem wouldn't help at all here, because the bottleneck is how many rows get scanned to satisfy the filter, not how much data is returned or sorted.",
   },
 
   // ----------------------------------------------------------------------------
@@ -656,6 +688,8 @@ export const QUESTIONS = [
       "Round Robin is less about perfect throughput and more about latency fairness. The quantum is the trade-off knob: too large feels like FCFS, too small wastes time on context switches.",
     lesson:
       "CPU scheduling decides which ready process runs next. Interactive systems usually prefer short response time over raw throughput. Round Robin gives each ready process a time slice, preventing long CPU-bound jobs from monopolizing the CPU. The time quantum must balance responsiveness against context-switch overhead.",
+    remember: "Convoy effect = FCFS lets short jobs queue behind long ones; Round Robin fixes it by time-slicing, but quantum too big feels like FCFS, too small wastes cycles on switching.",
+    interviewAnswer: "The convoy effect is what happens when First Come First Served lets a long CPU-bound job hog the processor while short interactive tasks pile up behind it, which kills perceived responsiveness even though utilization looks fine. Round Robin fixes this by giving every ready process a fixed time slice, so no single job can monopolize the CPU. The real engineering decision is the quantum size: too large and it behaves like FCFS, too small and you burn time on context switches instead of real work.",
   },
   {
     id: "q-os-sched-002",
@@ -694,6 +728,8 @@ export const QUESTIONS = [
       "Aging is the standard antidote to starvation: the longer a process waits, the higher its effective priority climbs, guaranteeing it eventually runs.",
     lesson:
       "Strict priority scheduling can starve low-priority processes indefinitely if higher-priority work keeps arriving. Aging solves this by incrementally increasing a waiting process's priority over time, so it is eventually selected. This preserves the benefits of priorities while guaranteeing progress.",
+    remember: "Starvation under strict priority is fixed by aging — let wait time itself raise priority, so nothing waits forever.",
+    interviewAnswer: "Strict priority scheduling can starve low-priority work indefinitely if higher-priority jobs keep arriving, because the scheduler never has a reason to pick the low-priority process. Aging solves this by gradually increasing a waiting process's effective priority the longer it sits in the ready queue, so eventually it outranks everything else and gets scheduled. It's a nice example of keeping the benefits of prioritization while still guaranteeing forward progress for everyone.",
   },
   {
     id: "q-os-deadlock-001",
@@ -732,6 +768,8 @@ export const QUESTIONS = [
       "Deadlock prevention often targets circular wait by forcing a global lock ordering. If every worker grabs locks in the same order, cycles cannot form.",
     lesson:
       "Deadlock requires four conditions: mutual exclusion, hold and wait, no preemption, and circular wait. Circular wait is the easiest to visualize: A waits for B, B waits for C, and C waits for A. Breaking any one condition prevents deadlock.",
+    remember: "Four Coffman conditions, but the visible \"loop\" in a deadlock is always circular wait — A waits on B, B waits on C, C waits on A.",
+    interviewAnswer: "Deadlock needs four conditions to hold simultaneously — mutual exclusion, hold-and-wait, no preemption, and circular wait — but when you actually look at a stuck system, what you see is the circular wait: each process is blocked waiting on a resource the next process in the chain is holding. Mutual exclusion and hold-and-wait are technically present too, but they're background conditions, not the visible symptom. That's why deadlock prevention strategies often specifically target circular wait, for example by forcing all processes to acquire locks in a fixed global order so a cycle can never form again.",
   },
   {
     id: "q-os-vmem-001",
@@ -770,6 +808,8 @@ export const QUESTIONS = [
       "A page fault isn't necessarily an error. Demand paging relies on faults to load pages lazily; only an access to an invalid mapping becomes a fatal fault.",
     lesson:
       "Virtual memory lets processes use an address space larger than physical RAM by keeping some pages on disk. When a process touches a page that isn't resident, the hardware raises a page fault; the OS finds the page (possibly evicting another), loads it, updates the page table, and restarts the instruction. An access to an invalid mapping is a different, fatal fault.",
+    remember: "Page fault = valid page just not resident, OS fetches it from disk; segfault = invalid access, process dies. Same trap mechanism, opposite outcomes.",
+    interviewAnswer: "A page fault happens when a process touches a page that's part of its valid address space but isn't currently loaded into physical RAM, so the CPU traps into the OS, which fetches the page from disk, updates the page table, and resumes the instruction. It's not inherently an error — demand paging relies on faults to lazily load memory. That's different from a segmentation fault, where the address itself is invalid or forbidden, which is fatal rather than something the OS quietly resolves.",
   },
   {
     id: "q-os-thrash-001",
@@ -808,6 +848,8 @@ export const QUESTIONS = [
       "Thrashing happens when the sum of working sets exceeds physical memory. Fixes include reducing the multiprogramming degree (swap out / suspend some processes) or adding RAM.",
     lesson:
       "Thrashing occurs when processes collectively need more memory than is physically available, so the system spends most of its time paging in and out rather than executing. CPU utilization drops while disk activity spikes. The remedy is to lower the degree of multiprogramming — suspend or swap out processes — or increase physical memory so working sets fit.",
+    remember: "Thrashing = sum of working sets > physical RAM, so CPU utilization crashes while disk paging spikes. Fix is fewer processes or more RAM, not more CPU.",
+    interviewAnswer: "Thrashing happens when you've packed in so many memory-hungry processes that their combined working sets exceed physical memory, so the system spends almost all its time paging pages in and out instead of doing real computation. You see the telltale signature of CPU utilization dropping while the disk is constantly busy, because every process is evicting pages that another process needs next. The fix is to reduce the degree of multiprogramming — suspend or swap out some processes — or simply add more RAM so working sets actually fit.",
   },
   {
     id: "q-os-sync-001",
@@ -846,6 +888,8 @@ export const QUESTIONS = [
       "counter = counter + 1 is three steps: read, add, write. Without a mutex or atomic operation, two threads can read the same value and both write back the same result, dropping an update.",
     lesson:
       "A race condition occurs when multiple threads access shared mutable state concurrently and the outcome depends on timing. Incrementing a counter is a read-modify-write that is not atomic, so interleavings can lose updates. Protect the critical section with a mutex, or use an atomic increment, to serialize the operation.",
+    remember: "counter++ is read-modify-write, not atomic — two threads can read the same value and stomp each other's write, silently losing increments. That's a race condition, not a deadlock.",
+    interviewAnswer: "Incrementing a shared counter looks like one operation but it's actually three steps under the hood — read, add, write — and without synchronization two threads can both read the same value, increment it locally, and then write back the same result, silently dropping one of the increments. That's a classic race condition, not a deadlock, because both threads finish just fine; they just stepped on each other's update. The fix is to make the read-modify-write atomic, either with a mutex around the critical section or a hardware-level atomic increment.",
   },
   {
     id: "q-os-semaphore-001",
@@ -884,6 +928,8 @@ export const QUESTIONS = [
       "A counting semaphore is essentially a managed permit pool: initialize it to N, wait() (acquire) decrements, signal() (release) increments. It naturally caps concurrency at N.",
     lesson:
       "A counting semaphore maintains an integer count of available permits. Threads call wait/acquire (blocking when the count hits zero) and signal/release to return a permit. Initializing it to 5 lets at most five threads proceed concurrently while the rest wait — the standard way to bound access to a fixed-size resource pool. A binary semaphore/mutex is the special case N=1.",
+    remember: "Mutex caps concurrency at 1; counting semaphore caps it at N. A mutex is just a counting semaphore with N=1.",
+    interviewAnswer: "When you need to cap concurrent access at some number greater than one — like five database connections — a counting semaphore is the right primitive because it's initialized with a permit count, and every wait or acquire call decrements that count while signal or release increments it back. Threads block once the count hits zero, which naturally limits concurrency to exactly five without you writing any custom bookkeeping. A binary semaphore or mutex is really just the special case of this where the count is fixed at one.",
   },
   {
     id: "q-os-procthread-001",
@@ -922,6 +968,8 @@ export const QUESTIONS = [
       "Threads of one process share the heap and global memory, so a shared cache is just a normal data structure. The trade-off is that a bug in one thread can corrupt shared state for all.",
     lesson:
       "Threads within a process share the same address space (heap, globals, file descriptors) but have separate stacks, making in-memory sharing essentially free. Processes have isolated address spaces, so sharing requires IPC or explicit shared memory. Choose threads for cheap data sharing; choose processes for fault isolation and security boundaries.",
+    remember: "Threads share the process's address space by default (cheap sharing, no isolation); processes are isolated and need explicit IPC to share anything.",
+    interviewAnswer: "Threads belonging to the same process share the heap, global variables, and file descriptors, with each thread only getting its own stack — so sharing an in-memory cache across threads is basically free, just a normal data structure with some locking around it. Processes, on the other hand, get separate address spaces by default, so sharing memory between them requires explicit mechanisms like shared memory segments or other IPC, which adds overhead. Given that the goal here is cheap, frequent sharing with no IPC cost, threads are the right call, accepting that a bug in one can corrupt shared state for all of them.",
   },
   {
     id: "q-os-pagereplace-001",
@@ -960,6 +1008,8 @@ export const QUESTIONS = [
       "Belady's anomaly is specific to FIFO and some non-stack algorithms. Stack-based algorithms like LRU and OPT are provably immune: more frames never increase faults.",
     lesson:
       "Belady's anomaly is the surprising result that, under FIFO page replacement, increasing the number of physical frames can increase the number of page faults for certain reference strings. It does not occur with 'stack' algorithms such as LRU or the optimal (OPT) policy, which guarantee fault counts are monotonic in frame count.",
+    remember: "Belady's anomaly: under FIFO, adding more frames can increase page faults. LRU and OPT are stack algorithms and are immune — more frames never hurts them.",
+    interviewAnswer: "Belady's anomaly is the counterintuitive case where giving a system more physical frames actually increases the number of page faults, and it specifically shows up with FIFO page replacement on certain reference strings. It's not thrashing, because thrashing is about having too little memory overall for the combined working sets — here we're adding memory and faults still go up, which is purely an artifact of how FIFO chooses victims. Stack-based algorithms like LRU and the optimal policy don't have this problem; for those, it's mathematically guaranteed that more frames never increase the fault count.",
   },
   {
     id: "q-os-fork-001",
@@ -998,6 +1048,8 @@ export const QUESTIONS = [
       "Orphans are adopted by init/PID 1, which reaps them when they finish. Contrast with zombies, which are finished-but-unreaped and consume a process table entry until the parent calls wait().",
     lesson:
       "When a parent terminates before its child, the child becomes an orphan and is re-parented to init (PID 1), which will wait() on it when it eventually exits. A zombie is the opposite timing: the child has terminated but the parent hasn't reaped its exit status, leaving a defunct entry in the process table.",
+    remember: "Orphan vs zombie: orphan is a live child whose parent died (re-parented to init); zombie is a dead child whose parent hasn't reaped it yet. Opposite timing, often confused.",
+    interviewAnswer: "When a parent process exits before its child finishes, the child doesn't die — it gets re-parented to init, PID 1, and is now called an orphan, continuing to run normally until init eventually reaps it. That's the opposite situation from a zombie, which is a process that has already terminated but whose exit status hasn't been collected yet by a wait call, so it still occupies a slot in the process table. People often mix these up, but the key distinction is timing: orphan means the parent died first while the child lives on, zombie means the child died first and is just waiting to be cleaned up.",
   },
   {
     id: "q-os-mutex-001",
@@ -1036,6 +1088,8 @@ export const QUESTIONS = [
       "Priority inheritance temporarily boosts the lock holder to the highest waiter's priority so it can finish and release quickly. The Mars Pathfinder bug was a famous real-world case.",
     lesson:
       "Priority inversion happens when a high-priority task waits on a resource held by a low-priority task, while medium-priority tasks preempt the holder and prevent it from releasing. Priority inheritance solves it by temporarily raising the holder's priority to that of the highest-priority waiter, so the critical section completes promptly.",
+    remember: "Priority inversion: a high-priority thread stalls because a low-priority lock holder keeps getting preempted by mediums. Fix is priority inheritance — temporarily promote the holder.",
+    interviewAnswer: "Priority inversion happens when a high-priority thread is blocked waiting on a lock held by a low-priority thread, but that low-priority holder keeps getting preempted by medium-priority threads that have nothing to do with the lock, so the high-priority thread ends up waiting far longer than its priority would suggest. The standard fix is priority inheritance: the lock holder temporarily borrows the priority of the highest-priority thread waiting on it, so it can't be preempted by those mediums and can finish and release the lock quickly. This isn't just theoretical — it's famously what caused the Mars Pathfinder watchdog resets.",
   },
   {
     id: "q-os-ipc-001",
@@ -1074,6 +1128,8 @@ export const QUESTIONS = [
       "Pipes give a simple byte-stream channel. Anonymous pipes connect related processes (parent/child); named pipes (FIFOs) have a filesystem path so unrelated processes can connect.",
     lesson:
       "Inter-process communication lets separate processes exchange data. A pipe is a unidirectional, OS-buffered byte stream: one process writes, another reads. Named pipes (FIFOs) expose a filesystem path so unrelated processes can connect. Other IPC forms include shared memory (fastest, needs its own synchronization), message queues, and sockets.",
+    remember: "A pipe is just an OS-buffered, unidirectional byte stream between processes; named pipes (FIFOs) extend that to unrelated processes via a filesystem path.",
+    interviewAnswer: "When two processes just need to push a stream of bytes between each other, a pipe is the simplest mechanism — one process writes, the other reads, and the kernel handles the buffering in between, so it feels like writing to and reading from a file. Anonymous pipes only work between related processes like a parent and its child, but named pipes, or FIFOs, expose a filesystem path so any two unrelated processes can connect to the same channel. It's worth contrasting that with shared memory, which is faster but requires you to handle synchronization yourself, since the OS isn't buffering anything for you there.",
   },
   {
     id: "q-os-contextswitch-001",
@@ -1112,6 +1168,8 @@ export const QUESTIONS = [
       "Each switch saves one thread's CPU state and loads another's, and can pollute caches/TLB. Too small a time quantum or too many runnable threads makes switching dominate useful work.",
     lesson:
       "A context switch saves the state of the running thread (registers, program counter, and possibly memory mappings) and restores another's so the CPU can multiplex many threads. It's pure overhead — no application work happens during the switch — and it grows with switch frequency. Reduce it by using larger time slices, limiting the number of runnable threads, or using async I/O instead of thread-per-task.",
+    remember: "Context switching is pure overhead — no app work happens during it — and its cost scales with switch frequency, not thread count alone. Fix: bigger time slices, fewer runnable threads.",
+    interviewAnswer: "A context switch is the cost of saving one thread's CPU state — registers, program counter, sometimes memory mappings — and loading another's so the CPU can multiplex across many threads, and importantly none of that time is spent doing actual application work. When you have hundreds of runnable threads switching rapidly, that overhead can dominate, especially since it also tends to pollute caches and the TLB along the way. The fix is to either use a larger time quantum so switches happen less often, reduce the number of runnable threads, or move to an async I/O model instead of spinning up a thread per task.",
   },
 
   // ----------------------------------------------------------------------------
@@ -1154,6 +1212,8 @@ export const QUESTIONS = [
       "HTTPS is HTTP over TLS over TCP. DNS gets the IP, TCP gives a stream, TLS secures it, then HTTP messages flow inside that secure channel.",
     lesson:
       "TLS provides confidentiality, integrity, and server authentication for HTTPS. The handshake validates the server certificate, agrees on cryptographic parameters, and derives session keys. Only after this secure channel is established does the browser send the HTTP request.",
+    remember: "HTTPS = HTTP over TLS over TCP — DNS finds the address, TCP opens the pipe, TLS locks it, then HTTP rides inside.",
+    interviewAnswer: "When a browser connects over HTTPS, DNS only resolves the hostname to an IP, and the TCP handshake just sets up a reliable connection — neither of those touches security. The actual certificate verification and encryption key negotiation happen in the TLS handshake, which authenticates the server and derives session keys. Only once that secure channel exists does the browser send the actual HTTP request inside it.",
   },
   {
     id: "q-cn-cache-001",
@@ -1192,6 +1252,8 @@ export const QUESTIONS = [
       "CDNs combine routing and caching: DNS or anycast gets users near an edge, then cache headers decide whether the edge can reuse stored content.",
     lesson:
       "Caching reduces latency and origin load by reusing prior responses. In web systems, browsers, proxies, and CDNs can cache assets based on headers like Cache-Control and ETag. CDNs are especially useful for static or widely repeated content because they serve it from locations closer to users.",
+    remember: "CDN edge caching skips the origin entirely — DNS/anycast just gets you near a node, the cache headers decide if it can serve you straight from there.",
+    interviewAnswer: "The reason the origin server isn't hit for every user is caching at the edge — the CDN stores a copy of the image at locations close to users and serves repeated requests directly from there based on headers like Cache-Control and ETag. DNS or anycast routing might get you to the nearest edge node, but that's just direction-finding; the actual savings come from not re-fetching content that's already cached locally. That's why CDNs are so effective for static, widely-shared assets like product images.",
   },
   {
     id: "q-cn-tcpudp-001",
@@ -1230,6 +1292,8 @@ export const QUESTIONS = [
       "For real-time data where freshness beats completeness (games, voice, video), UDP wins because a late retransmit is worse than a dropped packet. Reliability, if needed, is added selectively at the app layer.",
     lesson:
       "TCP provides reliable, ordered, connection-oriented delivery with retransmissions and congestion control, at the cost of latency and head-of-line blocking. UDP is connectionless and unreliable but minimal-latency. Real-time applications that value fresh data over guaranteed delivery choose UDP, often layering their own lightweight reliability where needed.",
+    remember: "TCP's reliability becomes a liability for real-time data — head-of-line blocking stalls fresh packets behind a retransmit, so UDP wins when \"late\" is worse than \"lost.\"",
+    interviewAnswer: "For something like a multiplayer game sending 60 updates a second, UDP is the right choice because it sends datagrams without waiting for acknowledgments or retransmissions. TCP's reliability actually hurts here — if a packet is lost, TCP will block all the newer data behind it until the lost segment is retransmitted, which is the classic head-of-line blocking problem. Since a stale position update is useless anyway, the game would rather drop it and move on, which is exactly the trade-off UDP is built for.",
   },
   {
     id: "q-cn-dns-001",
@@ -1268,6 +1332,8 @@ export const QUESTIONS = [
       "DNS is the internet's phone book. Resolution often walks from a recursive resolver to root, TLD, and authoritative servers, with heavy caching at each layer (and TTLs controlling freshness).",
     lesson:
       "The Domain Name System translates human-readable names like example.com into IP addresses. A recursive resolver queries the root, the top-level domain server, and the authoritative server as needed, caching results by TTL. ARP, DHCP, and NAT operate at different layers and solve unrelated addressing problems.",
+    remember: "DNS is the internet's phone book: name in, IP out, before any connection even starts — don't confuse it with ARP (IP-to-MAC), DHCP (IP assignment), or NAT (address rewriting).",
+    interviewAnswer: "That name-to-address translation is done by DNS, which is essentially the internet's phone book. The browser's resolver walks through root servers, top-level-domain servers, and finally the authoritative server for the domain, caching results along the way based on their TTL. It's easy to confuse with ARP, DHCP, or NAT, but those solve completely different problems — ARP maps IP to MAC locally, DHCP hands your device its own IP, and NAT rewrites addresses at a gateway — none of which resolve a domain name into an IP.",
   },
   {
     id: "q-cn-http-001",
@@ -1306,6 +1372,8 @@ export const QUESTIONS = [
       "Remember the pairing: 401 = 'who are you?' (authentication), 403 = 'I know who you are, and no' (authorization). The names are historically swapped, which trips people up.",
     lesson:
       "HTTP status codes are grouped: 2xx success, 3xx redirection, 4xx client errors, 5xx server errors. 401 Unauthorized signals that authentication is required or has failed (credentials missing/invalid), typically accompanied by a WWW-Authenticate header. 403 Forbidden means the client is authenticated but lacks permission. 404 means the resource doesn't exist.",
+    remember: "401 = \"who are you?\" (no/bad credentials), 403 = \"I know who you are, and no\" (authenticated but not allowed) — the names are famously backwards from what you'd guess.",
+    interviewAnswer: "When a request has no credentials at all, the right response is 401 Unauthorized, which really means \"authentication is required or failed,\" usually paired with a WWW-Authenticate header telling the client how to log in. That's different from 403 Forbidden, which means the server knows exactly who you are but still won't let you access the resource — that's an authorization failure, not an authentication one. So the rule of thumb is: missing or bad credentials gets a 401, valid credentials with insufficient permission gets a 403.",
   },
   {
     id: "q-cn-congestion-001",
@@ -1344,6 +1412,8 @@ export const QUESTIONS = [
       "Slow start grows the congestion window exponentially until it hits a threshold or detects loss, then transitions to the linear additive-increase of congestion avoidance. 'Slow' refers to the small starting window, not the growth rate.",
     lesson:
       "TCP congestion control probes available network capacity. Slow start begins with a small congestion window and doubles it roughly every round-trip time (exponential growth) until reaching a threshold or detecting loss. On loss it reduces the window (multiplicative decrease) and switches to congestion avoidance's slower linear increase. This is distinct from flow control, which protects the receiver, not the network.",
+    remember: "Slow start = exponential window growth until loss, then a hard cut and a switch to congestion avoidance's slow linear climb — \"slow\" describes the starting window, not the growth curve.",
+    interviewAnswer: "That exponential ramp-up is TCP's slow start, where the congestion window roughly doubles every round trip as the sender probes how much capacity the network can handle. Once it hits a threshold or detects a loss, it backs off sharply — multiplicative decrease — and switches into congestion avoidance, which grows the window much more conservatively and linearly. It's worth distinguishing this from flow control, which is about protecting the receiver's buffer using the advertised window, not about probing the network itself.",
   },
   {
     id: "q-cn-lb-001",
@@ -1382,6 +1452,8 @@ export const QUESTIONS = [
       "Load balancers improve both scalability and availability. Common algorithms include round robin, least connections, and IP hash; health checks let them route around failed instances automatically.",
     lesson:
       "A load balancer sits in front of a pool of backend servers and distributes incoming requests among them using algorithms like round robin or least connections. By running health checks and removing failing instances, it provides horizontal scalability and high availability. Layer 4 balancers route by IP/port; Layer 7 balancers can route by HTTP attributes like path or host.",
+    remember: "Load balancer = the thing that spreads requests across a backend pool and routes around anything failing its health checks — not a firewall (filters by policy) or a cache (stores responses).",
+    interviewAnswer: "What's described here is a load balancer sitting in front of the backend pool, distributing incoming requests using an algorithm like round robin or least connections. The key extra behavior is the health checks — it continuously monitors each backend and stops routing to any instance that's failing, which gives you both horizontal scalability and higher availability. It's distinct from a firewall, which just filters traffic by security policy, and from a plain reverse-proxy cache, which serves stored responses rather than distributing live traffic across servers.",
   },
   {
     id: "q-cn-idempotent-001",
@@ -1420,6 +1492,8 @@ export const QUESTIONS = [
       "PUT, DELETE, and GET are idempotent; POST generally is not. For non-idempotent creates, add an idempotency key so the server can dedupe retried requests.",
     lesson:
       "An idempotent operation produces the same result no matter how many times it is applied. In HTTP, GET, PUT, and DELETE are defined as idempotent, while POST is not. Designing updates as PUT (replace by id) makes client retries safe. When you must use POST for creates, an idempotency key lets the server recognize and ignore duplicate retries.",
+    remember: "PUT, GET, and DELETE are idempotent by spec; POST is not — for safe create-retries without an idempotent verb, you need a client-supplied idempotency key.",
+    interviewAnswer: "For an update-by-id that needs to survive client retries safely, you want PUT, because it's defined as idempotent — sending the exact same request multiple times leaves the resource in the same end state. POST doesn't have that guarantee; retrying a POST typically creates a brand-new resource each time, which is exactly the duplicate-charge or duplicate-record risk we're trying to avoid. If you genuinely need POST for a create operation, the usual fix is to have the client attach an idempotency key so the server can recognize and discard duplicate retries.",
   },
   {
     id: "q-cn-subnet-001",
@@ -1458,6 +1532,8 @@ export const QUESTIONS = [
       "Usable hosts = 2^(32 − prefix) − 2 for IPv4. The minus two accounts for the network and broadcast addresses, which can't be assigned to hosts.",
     lesson:
       "In IPv4 CIDR notation, the prefix length (e.g., /24) is the number of network bits. Host bits = 32 − prefix. The number of addresses is 2^(host bits), and usable host addresses are that minus two (network and broadcast). So a /24 has 8 host bits → 256 addresses → 254 usable.",
+    remember: "Usable IPv4 hosts = 2^(32 − prefix) − 2; the minus-2 is always the network address and the broadcast address.",
+    interviewAnswer: "A /24 network has 32 minus 24, or 8 host bits, which gives 2 to the 8th, 256 total addresses. But two of those are reserved — the all-zeros network address and the all-ones broadcast address — so you subtract 2, leaving 254 usable host addresses. That formula, 2 to the power of host bits minus 2, is the general rule for any IPv4 CIDR block.",
   },
   {
     id: "q-cn-cors-001",
@@ -1496,6 +1572,8 @@ export const QUESTIONS = [
       "CORS isn't server security — it's the browser protecting users. The server opts in by sending Access-Control-Allow-Origin (and friends); for some requests the browser first sends a preflight OPTIONS.",
     lesson:
       "Browsers enforce the same-origin policy: scripts can't read responses from a different origin (scheme+host+port) unless the server explicitly opts in via Cross-Origin Resource Sharing headers like Access-Control-Allow-Origin. The request may still reach the server and return 200, but the browser withholds the response from JavaScript. Non-simple requests trigger a preflight OPTIONS check first.",
+    remember: "CORS isn't a server firewall — it's the browser refusing to hand the script a response it already received, unless the server's Access-Control-Allow-Origin says it's okay.",
+    interviewAnswer: "This is the browser's same-origin policy in action — the request actually succeeded and got a 200 back, but the browser won't let the JavaScript on app.example.com read a response from a different origin like api.other.com unless the server explicitly allows it via CORS headers like Access-Control-Allow-Origin. It's important to realize CORS is a client-side protection for users, not a server security mechanism; the server has to opt in, and for certain request types the browser will even send a preflight OPTIONS request first to check permissions before the real one goes out. So you can have a perfectly successful server response that JavaScript is still blocked from reading.",
   },
   {
     id: "q-cn-http2-001",
@@ -1534,6 +1612,8 @@ export const QUESTIONS = [
       "HTTP/2 multiplexes many request/response streams over one connection plus header compression (HPACK), removing the HTTP/1.1 need for many connections and reducing head-of-line blocking at the HTTP layer (TCP-level HOL remains, which HTTP/3 addresses).",
     lesson:
       "HTTP/1.1 handles one request per connection at a time, so browsers open a limited number of parallel connections and requests queue. HTTP/2 multiplexes many independent streams over a single TCP connection and compresses headers, dramatically improving load of many small assets. It still uses TCP; HTTP/3 moves to QUIC over UDP to also eliminate TCP-level head-of-line blocking.",
+    remember: "HTTP/2 fixes the \"few-connections\" stall with multiplexing — many streams, one TCP connection — not by switching transports (that's HTTP/3 with QUIC/UDP).",
+    interviewAnswer: "The big win going from HTTP/1.1 to HTTP/2 for a page with many small assets is multiplexing — HTTP/2 can send many concurrent request and response streams over a single TCP connection instead of needing several separate connections that queue requests behind each other. It also adds header compression with HPACK, which helps with all those repeated small requests. It's still running over TCP, though — people sometimes assume HTTP/2 switched to UDP, but that's actually HTTP/3 with QUIC, which is what finally removes the remaining TCP-level head-of-line blocking.",
   },
   {
     id: "q-cn-cookies-001",
@@ -1572,6 +1652,8 @@ export const QUESTIONS = [
       "Cookies let stateless HTTP carry state. The server issues a session id via Set-Cookie; the browser returns it in the Cookie header. Flags like HttpOnly, Secure, and SameSite harden it against theft and CSRF.",
     lesson:
       "HTTP is stateless, so applications maintain sessions using cookies. On login the server sends Set-Cookie with a session identifier; the browser stores it and automatically includes it in the Cookie header on subsequent requests, letting the server recognize the user. Security flags (HttpOnly, Secure, SameSite) protect the cookie from script access, plaintext transmission, and cross-site misuse.",
+    remember: "HTTP is stateless — cookies are what fake statefulness, with Set-Cookie issuing a session id and the browser auto-replaying it via the Cookie header on every request.",
+    interviewAnswer: "Since HTTP itself has no memory between requests, sites use cookies to maintain login state — after you authenticate, the server sends a Set-Cookie header with a session identifier, and the browser automatically attaches that value in the Cookie header on every subsequent request to that site. That's what lets the server recognize you without re-authenticating each time. Flags like HttpOnly, Secure, and SameSite are then layered on to stop that cookie from being stolen via script injection, sent over plaintext, or replayed in cross-site requests.",
   },
   {
     id: "q-cn-nat-001",
@@ -1610,6 +1692,8 @@ export const QUESTIONS = [
       "PAT (NAT overload) is what home routers use: the router rewrites source IP/port and keeps a translation table so it can map each returning packet back to the right internal host and port.",
     lesson:
       "Network Address Translation lets many devices with private IP addresses share one public IP. The router rewrites the source address (and, in port address translation, the source port) on outbound packets and records the mapping, so when replies arrive it can translate them back to the correct internal host. This conserves scarce IPv4 addresses and adds a basic boundary between the private network and the internet.",
+    remember: "NAT/PAT lets many private IPs share one public IP by rewriting source IP and port per connection and keeping a translation table to route replies back correctly.",
+    interviewAnswer: "This works because of NAT, or more specifically port address translation, which the router uses to let many internal devices share a single public IP address. When a device sends a packet out, the router rewrites the source IP and port and records that mapping in a translation table, so when the reply comes back, it knows exactly which internal device and port to forward it to. This is also how home networks conserve scarce public IPv4 addresses while still giving every device internet access.",
   },
 
   // ----------------------------------------------------------------------------
@@ -1652,6 +1736,8 @@ export const QUESTIONS = [
       "This is open-closed plus dependency inversion working together: the processor stays closed to modification because it depends on an interface, not concrete payment SDKs.",
     lesson:
       "SOLID principles help keep object-oriented code flexible. Dependency inversion says high-level policy should depend on abstractions, not low-level details. Open-closed says behavior should be extendable without editing stable code. A PaymentGateway interface with injected implementations satisfies both.",
+    remember: "Hardcoded if-else over vendor SDKs = both OCP and DIP violated; fix is \"depend on an interface, inject the implementation.\"",
+    interviewAnswer: "When a class directly constructs every concrete payment SDK and branches on provider name, it's tightly coupled to low-level details and has to change every time a new provider shows up. The fix is to introduce a PaymentGateway interface that the processor depends on, then inject concrete gateways into it. That way the processor stays closed to modification — adding Razorpay or Stripe support is just a new class behind the same contract, which is dependency inversion and open-closed working together.",
   },
   {
     id: "q-oop-srp-001",
@@ -1690,6 +1776,8 @@ export const QUESTIONS = [
       "SRP is best read as 'one reason to change.' When edits to formatting, calculation, and delivery all land in one class, split it into calculation, rendering, and notification collaborators.",
     lesson:
       "The Single Responsibility Principle states a class should have only one reason to change. When tax calculation, PDF rendering, and emailing live in one class, unrelated changes interfere with each other and tests become entangled. Separating them into focused classes (e.g., InvoiceCalculator, InvoiceRenderer, InvoiceNotifier) isolates change and improves testability.",
+    remember: "\"One reason to change\" is the SRP litmus test — if three unrelated edits all land in the same class, split it.",
+    interviewAnswer: "This InvoiceManager is doing tax math, PDF rendering, and emailing all in one class, so a change to the email template forces you to re-test totally unrelated logic like tax calculation. That's a textbook Single Responsibility violation — the class has more than one reason to change. I'd split it into something like an InvoiceCalculator, InvoiceRenderer, and InvoiceNotifier so each piece can change and be tested independently.",
   },
   {
     id: "q-oop-lsp-001",
@@ -1728,6 +1816,8 @@ export const QUESTIONS = [
       "The Square-Rectangle problem is the classic LSP cautionary tale: an 'is-a' relationship that holds in geometry breaks behaviorally. Prefer modeling shapes as immutable or via composition rather than forcing the inheritance.",
     lesson:
       "The Liskov Substitution Principle says objects of a subtype must be usable anywhere the base type is expected, without breaking the program's correctness. Square inherits from Rectangle but violates the implicit contract that width and height vary independently, so code relying on that contract misbehaves. The fix is to avoid the inheritance — make shapes immutable or compose behavior instead.",
+    remember: "Square-extends-Rectangle is the canonical LSP trap — an \"is-a\" that's geometrically true can still break behaviorally.",
+    interviewAnswer: "Even though a square is mathematically a rectangle, making Square inherit from Rectangle breaks the implicit contract that width and height can be set independently. So code that sets width to 5 and height to 4 expecting area 20 silently gets 16 when it's actually handed a Square — that's a Liskov Substitution violation because the subtype doesn't honor the base type's behavior. The usual fix is to stop forcing that inheritance and instead model shapes as immutable or use composition.",
   },
   {
     id: "q-oop-compose-001",
@@ -1766,6 +1856,8 @@ export const QUESTIONS = [
       "Composition lets you combine MessageType and DeliveryChannel as separate strategies. That turns class multiplication into small interchangeable parts.",
     lesson:
       "Inheritance is useful for stable is-a relationships. Composition is often better when behavior varies along multiple independent axes. If subclasses multiply for every combination, split those dimensions into separate objects and compose them.",
+    remember: "Subclasses multiplying with every new combination of independent behaviors = inheritance explosion; compose the axes instead.",
+    interviewAnswer: "When you see EmailNotification, SmsNotification, PromotionalEmail, TransactionalSms and the subclass count keeps growing every time a new channel or message type appears, that's inheritance being used to model two independent dimensions at once. Inheritance hierarchies blow up combinatorially in that situation. The better design is to pull MessageType and DeliveryChannel apart into separate strategy objects and compose them, so adding a new channel or type is one new small class, not a cross product of subclasses.",
   },
   {
     id: "q-oop-encap-001",
@@ -1804,6 +1896,8 @@ export const QUESTIONS = [
       "Encapsulation isn't just 'make fields private' — it's keeping invariants enforceable. Expose intent-revealing methods (deposit, withdraw) that validate, and the object can never reach an illegal state from outside.",
     lesson:
       "Encapsulation bundles data with the methods that operate on it and restricts direct external access to internal state. By making balance private and exposing validated operations like deposit and withdraw, the class enforces its invariants (e.g., no overdraft) regardless of how callers use it. Public mutable fields break this guarantee by letting outside code put the object in an invalid state.",
+    remember: "Public mutable fields kill invariants — encapsulation means hiding state behind validated methods, not just marking it private.",
+    interviewAnswer: "The problem here isn't that balance is a number, it's that it's publicly writable, so any code can shove it to a negative value and bypass the overdraft rule entirely. Encapsulation fixes this by hiding the field and only exposing intent-revealing operations like deposit and withdraw that enforce the invariant internally. So the object itself guarantees it can never end up in an invalid state, no matter who's calling it.",
   },
   {
     id: "q-oop-poly-001",
@@ -1842,6 +1936,8 @@ export const QUESTIONS = [
       "Dynamic dispatch lets you write code against the abstraction (Shape) while each concrete type supplies its own behavior. Adding a new shape requires no change to the rendering loop — that's the open-closed payoff.",
     lesson:
       "Runtime polymorphism lets a single call site invoke different implementations depending on the actual object's type. Each subclass overrides area(), and the runtime dispatches to the correct override (dynamic binding). This eliminates type switches and supports the open-closed principle: new Shape subclasses work with existing code unchanged. Overloading, by contrast, is resolved statically by parameter types.",
+    remember: "Overriding vs overloading: overriding dispatches at runtime based on the actual object; overloading resolves at compile time based on argument types.",
+    interviewAnswer: "The renderer calls shape.area() on a list of Shape references and gets different behavior for Circle, Square, and Triangle without any type checks — that's runtime polymorphism through method overriding. Each subclass provides its own area() implementation, and the language dispatches to the correct one based on the object's actual type at runtime, not its declared type. This is what lets you add a new Shape subclass later without touching the rendering loop at all, which is the open-closed principle in action.",
   },
   {
     id: "q-oop-factory-001",
@@ -1880,6 +1976,8 @@ export const QUESTIONS = [
       "A factory concentrates the 'which class to new up' decision in one place, so client code depends only on the product interface. Swapping or adding implementations becomes a change in the factory, not across every call site.",
     lesson:
       "The Factory pattern encapsulates object creation: instead of scattering constructor calls, clients ask a factory for a product by some criterion and receive an instance typed to an interface. This decouples callers from concrete classes, centralizes construction logic, and makes it easy to add or swap implementations. Observer, Decorator, and Singleton solve unrelated problems (notification, dynamic wrapping, single instance).",
+    remember: "Lots of scattered `new ConcreteClass()` calls chosen by config is the smell that screams Factory pattern.",
+    interviewAnswer: "When client code is full of `new MySqlConnection()` or `new PostgresConnection()` picked by some config value, every caller is coupled to concrete classes and their constructors. A factory centralizes that \"which class do I instantiate\" decision in one place, so callers just ask for a connection by name and get back something typed to a common interface. That means swapping or adding a new database type only changes the factory, not every call site that needed a connection.",
   },
   {
     id: "q-oop-strategy-001",
@@ -1918,6 +2016,8 @@ export const QUESTIONS = [
       "Strategy turns a branching method into a family of pluggable objects implementing a shared interface. checkout depends on the ShippingStrategy abstraction; new rules are new classes, satisfying open-closed.",
     lesson:
       "The Strategy pattern defines a family of interchangeable algorithms, encapsulates each behind a common interface, and lets the client choose one at runtime. Replacing a sprawling conditional with injected strategy objects removes branching, isolates each algorithm for testing, and lets you add new behaviors without modifying the context class — a direct application of the open-closed principle.",
+    remember: "A giant if-else picking among interchangeable algorithms is the Strategy pattern's calling card — extract each branch into its own class behind a shared interface.",
+    interviewAnswer: "A checkout class with a growing if-else for flat-rate, weight-based, and free shipping is going to need editing every time a new shipping rule shows up, which violates open-closed. Strategy fixes this by pulling each algorithm out into its own class implementing a common ShippingStrategy interface, and the checkout class just holds a reference to whichever one was injected. Adding a new shipping rule then means writing a new strategy class, with zero changes to checkout itself.",
   },
   {
     id: "q-oop-coupling-001",
@@ -1956,6 +2056,8 @@ export const QUESTIONS = [
       "Long call chains into another object's guts (a 'train wreck') signal high coupling and violate the Law of Demeter. Give B a method like configurePool(size) so callers state intent and B owns its internals.",
     lesson:
       "Coupling measures how dependent modules are on each other's details; cohesion measures how focused a module's responsibilities are. Reaching through several layers of another object's internals creates high (structural) coupling, so internal changes ripple outward. The Law of Demeter — 'only talk to your immediate collaborators' — suggests exposing an intent-revealing method that hides the internal chain, lowering coupling.",
+    remember: "Train-wreck chains like `b.getConfig().getDb().getPool()` violate the Law of Demeter — give B a real method instead of more getters.",
+    interviewAnswer: "Module A reaching through Module B's internals with a chain like getConfig().getDb().getPool().setSize() is a classic sign of high coupling — any change to B's internal structure breaks A even though nothing conceptually changed from A's point of view. The Law of Demeter says you should only talk to your immediate collaborators, so the fix is giving B a focused method like configurePool(size) that hides the internal chain. That's \"tell, don't ask\" — A states its intent and B decides how to satisfy it internally.",
   },
   {
     id: "q-oop-abstraction-001",
@@ -1994,6 +2096,8 @@ export const QUESTIONS = [
       "Abstraction is about the interface you present: callers reason about 'log a message,' not file handles or network retries. It pairs with encapsulation, which hides the concrete state that makes that interface work.",
     lesson:
       "Abstraction exposes only the essential operations of a component while hiding how they're implemented. A log(message) method lets callers ignore whether logging writes to a file, console, or network, so the backend can change without affecting them. It's closely related to encapsulation (hiding internal state) but focuses on simplifying the interface that clients depend on.",
+    remember: "Abstraction is about the interface callers see (\"what\"); encapsulation is about hiding the state that makes it work (\"how\").",
+    interviewAnswer: "A log(message) method that callers use without knowing whether it writes to a file, the console, or a remote service is a clean example of abstraction — it exposes the essential operation and hides everything about how that operation is fulfilled. Because callers only depend on that simple interface, the backend can be swapped or changed without touching any calling code. It's related to encapsulation, but the focus here is specifically on simplifying what the client sees, not on hiding an object's own internal data.",
   },
   {
     id: "q-oop-observer-001",
@@ -2032,6 +2136,8 @@ export const QUESTIONS = [
       "Observer (publish/subscribe) decouples the source of an event from its handlers. The subject keeps a list of observers and calls a common notify method; new reactions are new observers, with no change to the order class.",
     lesson:
       "The Observer pattern defines a one-to-many dependency: a subject maintains a list of observers and notifies them automatically when its state changes, via a shared update interface. This decouples the subject from concrete handlers, so you can add or remove reactions (email, analytics, inventory) without modifying the subject — a foundation of event-driven and publish/subscribe designs.",
+    remember: "One subject, many independent reactions that can grow over time = Observer/pub-sub, not Strategy or Factory.",
+    interviewAnswer: "When an order's status changes and email, analytics, and inventory all need to react without the order object knowing who they are, that's a one-to-many notification problem, which is exactly what the Observer pattern solves. The subject — the order — just keeps a list of registered observers and calls a shared notify method on all of them whenever its state changes. That decouples the order from any specific handler, so you can add a new reaction later just by registering a new observer, with no changes to the order class itself.",
   },
   {
     id: "q-oop-singleton-001",
@@ -2070,6 +2176,8 @@ export const QUESTIONS = [
       "Singleton guarantees one instance and a global access point, which is handy for shared config or connection pools — but it introduces global state that complicates testing and hides dependencies. Dependency injection of a single instance is often a cleaner alternative.",
     lesson:
       "The Singleton pattern restricts a class to a single instance and provides a global access point to it, useful for shared resources like configuration or a connection pool. The well-known caveat is that it introduces global mutable state, which can hide dependencies, complicate unit testing, and cause subtle issues with concurrency and initialization order. Many teams prefer injecting one shared instance instead.",
+    remember: "Singleton guarantees exactly one instance and a global access point — but that global state is also its biggest cost to testability.",
+    interviewAnswer: "When you need exactly one shared configuration object and creating multiple copies would cause inconsistent settings across the app, Singleton is the pattern designed for that — it restricts instantiation to one instance and gives every module the same global access point. The catch is that global state like this can hide dependencies and make unit testing harder, since tests can leak state into each other through the shared instance. A lot of teams prefer just creating one instance and injecting it explicitly rather than relying on the pattern's global access.",
   },
 
   // ----------------------------------------------------------------------------
@@ -2112,6 +2220,8 @@ export const QUESTIONS = [
       "Reach for a reference parameter when the argument is guaranteed to exist and won't be reseated. Reach for a pointer (or `std::optional<T&>`-style pattern) when 'no value' is a real, expected case you must handle.",
     lesson:
       "A reference must be bound to a valid object at the point it's declared and can never be null or rebound to a different object afterward. A pointer can be null, can be reassigned to point elsewhere, and requires explicit dereferencing. Neither is inherently faster — both are typically pointer-sized under the hood — so the choice is about expressing 'this always refers to something valid' (reference) versus 'this may or may not refer to something, and that may change' (pointer).",
+    remember: "Reference vs pointer: a reference is a permanent, non-null alias bound at creation; a pointer can be null or reseated — pick reference when \"must exist, never changes\" is the contract.",
+    interviewAnswer: "I'd use a reference here because it guarantees the caller passed a valid config — references can't be null and can't be rebound to point at something else later, so the function's contract is airtight. A pointer would technically work too, but it opens the door to null checks and reassignment that just aren't needed when the value is always expected to exist. Performance is identical either way since a reference is just a pointer under the hood with stricter compiler-enforced guarantees.",
   },
   {
     id: "q-cpp-const-001",
@@ -2150,6 +2260,8 @@ export const QUESTIONS = [
       "Marking every method that doesn't mutate the object as `const` lets you accept `const&` parameters everywhere, which documents intent and lets the compiler catch accidental mutations.",
     lesson:
       "A `const` member function promises the compiler it won't modify the object's logical state (modulo `mutable` members), which lets it be called on `const` objects or through `const` references. A non-const method makes no such promise, so the compiler refuses to call it on a const object — that's the whole mechanism, independent of the argument passed or any runtime behavior.",
+    remember: "A method's `const` is part of its signature: const objects can only call const methods, because const is the compiler's \"I won't mutate you\" contract, not a runtime optimization.",
+    interviewAnswer: "The `const` on `size()` is a compile-time promise that the method won't change the object's observable state, so the compiler allows it to be invoked on a `const Widget&`. `resize()` makes no such promise, so calling it through a const reference is rejected outright — it has nothing to do with performance or how the vector member itself is declared. This is exactly why marking every non-mutating method const is good practice: it lets you safely accept const references throughout your codebase.",
   },
   {
     id: "q-cpp-raii-001",
@@ -2188,6 +2300,8 @@ export const QUESTIONS = [
       "RAII (Resource Acquisition Is Initialization) is C++'s core idiom for exception safety: tie a resource's lifetime to an object's constructor/destructor so cleanup happens automatically on every exit path, including exceptions.",
     lesson:
       "When an exception propagates, C++ unwinds the stack and runs the destructors of stack-allocated objects in scope, but it does not run arbitrary 'cleanup' statements that simply weren't reached — those are skipped. A raw `FILE*` has no destructor, so an exception thrown before `fclose` leaks the handle. Wrapping it in an RAII type (or using `std::unique_ptr` with a custom deleter, or `std::fstream`) guarantees the destructor — and therefore the cleanup — runs on every exit path.",
+    remember: "Exception thrown mid-function means every un-reached cleanup statement is skipped — only destructors of in-scope stack objects run, so raw resources without a destructor leak.",
+    interviewAnswer: "When an exception is thrown, the stack unwinds and runs destructors for objects already in scope, but it doesn't execute the remaining lines of code — so that `fclose(f)` at the bottom of the function simply never runs. The fix is RAII: wrap the file handle in an object whose destructor calls `fclose`, so cleanup is guaranteed on every exit path, exception or not. That's really the whole point of RAII — tying resource lifetime to object lifetime instead of relying on reaching a specific line of code.",
   },
   {
     id: "q-cpp-slicing-001",
@@ -2226,6 +2340,8 @@ export const QUESTIONS = [
       "Whenever you need runtime polymorphism with a container, store pointers or smart pointers (`std::vector<std::unique_ptr<Shape>>`), never plain base-class values — value containers always slice derived data away.",
     lesson:
       "Object slicing occurs when a derived-class object is copied or assigned into a variable, parameter, or container element typed as the base class by value: only the base-class portion is copied, the derived data is discarded, and the dynamic type becomes exactly the base class — virtual dispatch can no longer reach the derived override because the object literally isn't a `Circle` anymore. The fix is to store pointers/references (or smart pointers) to the base type so polymorphism is preserved.",
+    remember: "Object slicing: storing a derived object by value in a base-typed container or variable strips the derived part away — polymorphism needs pointers or references, never plain base-class values.",
+    interviewAnswer: "The vector is declared as `vector<Shape>`, so when the Circle gets pushed in, only the Shape-sized portion gets copied — the derived data and the dynamic type are sliced off, and what's actually stored is a plain Shape. Since there's no Circle left in memory at that point, calling draw() can only resolve to Shape's version, virtual or not. The fix is to store pointers or smart pointers instead, like `vector<unique_ptr<Shape>>`, so the full derived object stays intact and dispatch works as expected.",
   },
   {
     id: "q-cpp-virtualdtor-001",
@@ -2264,6 +2380,8 @@ export const QUESTIONS = [
       "Any class intended to be a polymorphic base — i.e., ever deleted through a base pointer — needs a `virtual` destructor. Without it, `delete` on a base pointer is undefined behavior whenever the actual object is a derived type with extra resources.",
     lesson:
       "When a destructor is not virtual, `delete` on a base-class pointer resolves the destructor call statically, based on the pointer's declared type, not the object's actual runtime type. So `delete p` where `p` is `Base*` calls only `~Base()`, skipping `~Derived()` entirely — any derived-only members (like the vector) are never properly destroyed, and in general this is undefined behavior. Declaring `~Base()` virtual fixes it by making destructor dispatch go through the vtable like any other virtual call.",
+    remember: "Non-virtual destructor through a base pointer: `delete` calls based on static type, so `~Derived()` never runs — any base class meant to be deleted polymorphically needs a virtual destructor.",
+    interviewAnswer: "Since `~Base()` isn't marked virtual, `delete p` resolves the destructor call statically based on `p`'s declared type, which is `Base*` — so only `~Base()` runs, and `~Derived()` is never called at all. That means the vector member inside Derived never gets its destructor invoked, which is undefined behavior, not just a missed cleanup. The rule of thumb is: any class designed to be used polymorphically and deleted through a base pointer must declare its destructor virtual.",
   },
   {
     id: "q-cpp-move-001",
@@ -2302,6 +2420,8 @@ export const QUESTIONS = [
       "`std::move` is most useful when you're handing off ownership of a named object across an assignment, into a container, or as an argument — not on a plain `return localVar;`, where the language already does the efficient thing. Wrapping it can actually disable NRVO (named return value optimization) in some compilers.",
     lesson:
       "Move semantics let resources (heap buffers, file handles, etc.) be transferred out of an object instead of deep-copied, by binding to an rvalue reference (`T&&`) and leaving the source in a valid-but-unspecified, cheap-to-destroy state. For `return localVar;` of a named local, the compiler treats the return as an rvalue and will use move construction or elide the copy/move entirely (NRVO) — both outcomes a manual `std::move` doesn't improve on, and which it can sometimes interfere with.",
+    remember: "Return-by-value of a named local: the compiler already moves or elides it since C++11 — wrapping it in `std::move` is redundant and can actually block NRVO.",
+    interviewAnswer: "Since C++11, returning a named local object by value is automatically treated as a move, or the compiler can apply return value optimization and elide the copy/move entirely — so wrapping it in `std::move` doesn't make it any faster. In some cases it can actually be counterproductive because it disables the compiler's ability to apply NRVO. `std::move` earns its keep when you're explicitly transferring ownership across an assignment or into a container, not on a plain return statement like this one.",
   },
   {
     id: "q-cpp-copy-001",
@@ -2340,6 +2460,8 @@ export const QUESTIONS = [
       "Any class managing a raw resource (pointer, handle, fd) needs the Rule of Three/Five: define copy constructor, copy assignment, and destructor together (and move constructor/assignment in modern C++) — or better, hold the resource in a `std::unique_ptr`/`std::vector` and get correct behavior for free.",
     lesson:
       "Without a user-defined copy constructor, C++ generates one that performs a memberwise shallow copy — for a raw pointer member, that copies the address, not the pointee. Two objects then alias the same heap buffer. When both go out of scope, each runs the (also default) destructor, which here does nothing special — but if a destructor freed `data`, it would free the same memory twice (double free), a classic heap-corruption bug. The fix is a proper deep-copy copy constructor, or RAII via a smart pointer/container that already implements correct copy semantics.",
+    remember: "Default copy constructor does a shallow copy: raw pointer members get their address copied, not their data — two objects end up sharing one buffer, setting up a double free.",
+    interviewAnswer: "Because Buffer doesn't define its own copy constructor, the compiler generates one that just copies the data pointer's value — the address — rather than allocating a new buffer and copying the bytes. So after `Buffer b = a;`, both a and b point at the exact same heap allocation. When they go out of scope, if there were a destructor freeing data, it would run twice on the same pointer, causing the heap corruption — this is the classic case for why a class managing a raw resource needs the Rule of Three or Five, or should just use a smart pointer instead.",
   },
   {
     id: "q-cpp-iterator-001",
@@ -2378,6 +2500,8 @@ export const QUESTIONS = [
       "Never grow or shrink a `vector` while holding iterators (including a range-based for loop's hidden ones) into it. If you need to add elements based on a scan, collect them in a separate container and append after the loop, or index by position carefully and re-check bounds.",
     lesson:
       "`std::vector` stores elements in one contiguous, dynamically-resized buffer. When `push_back` exceeds current capacity, it allocates a new, larger buffer, copies/moves elements over, and frees the old buffer — any iterators (including the ones a range-based for loop uses internally) that pointed into the old buffer are now dangling. This is iterator invalidation, and using an invalidated iterator is undefined behavior, which is why the crash is intermittent and condition-dependent rather than guaranteed.",
+    remember: "push_back during a range-based for loop: reallocation can invalidate the loop's hidden iterator mid-iteration — never grow a vector while you're iterating over it.",
+    interviewAnswer: "A range-based for loop is iterating using the vector's underlying iterators, and calling push_back inside that loop can trigger a reallocation once capacity is exceeded — the vector moves all its elements to a new, larger buffer and frees the old one. That leaves the loop's iterator pointing into freed memory, which is undefined behavior, so the crash shows up intermittently depending on when reallocation happens to trigger. The safe pattern is to collect the new elements in a separate container and append them after the loop finishes, rather than mutating the vector you're actively iterating.",
   },
   {
     id: "q-cpp-smartptr-001",
@@ -2416,6 +2540,8 @@ export const QUESTIONS = [
       "Break ownership cycles by making one direction of the relationship a `std::weak_ptr` instead of `shared_ptr` — typically the 'back-pointer' (e.g., `Child::parent` as `weak_ptr<Parent>`) so it observes without contributing to the reference count.",
     lesson:
       "`std::shared_ptr` manages an object via reference counting: the object is destroyed when its count reaches zero. If two (or more) objects hold `shared_ptr`s to each other, they form a cycle where each one's count is kept alive by the other, so neither ever reaches zero — even though nothing outside the cycle references them. This is a classic shared_ptr memory leak. `std::weak_ptr` exists precisely to model non-owning references that don't participate in the count, breaking such cycles.",
+    remember: "shared_ptr reference cycle: two objects holding shared_ptrs to each other keep each other's count above zero forever — break it with weak_ptr on the back-reference.",
+    interviewAnswer: "shared_ptr destroys its managed object once its reference count hits zero, but here Parent and Child each hold a shared_ptr to the other, so each one's count is being kept alive by the other — neither can ever reach zero, even after everything outside the cycle lets go. This is the classic shared_ptr cycle leak, and it's well-defined behavior, not undefined — it's just an unwanted outcome of how reference counting works. The standard fix is to make one direction, usually the back-pointer like Child's reference to Parent, a weak_ptr instead, since it observes the object without contributing to its reference count.",
   },
   {
     id: "q-cpp-binding-001",
@@ -2454,6 +2580,8 @@ export const QUESTIONS = [
       "If a base class method might ever need to be overridden with runtime polymorphism, mark it `virtual` (and mark the override `override` for compiler-checked correctness). Without `virtual`, calls through a base pointer/reference always use the base's version, regardless of the real object type.",
     lesson:
       "C++ uses static (compile-time) binding by default: a non-virtual method call is resolved based on the declared type of the pointer or reference used to call it, not the actual type of the object it points to. Only `virtual` methods get dynamic (runtime) binding via the vtable, where the actual object's overridden version is invoked. Here, since `greet()` isn't virtual, `p->greet()` resolves to `Base::greet()` purely because `p` is typed as `Base*`, regardless of it actually pointing at a `Derived`.",
+    remember: "Virtual dispatch vs static binding: non-virtual calls resolve by the pointer's declared type at compile time, not the object's real type — mark it virtual to get the actual runtime override.",
+    interviewAnswer: "Since greet() isn't declared virtual in Base, the call p->greet() is resolved at compile time using the static type of the pointer, which is Base*, completely ignoring that the actual object is a Derived. That's why it prints \"Base\" — there's no vtable lookup happening because nothing here is virtual. If you wanted \"Derived\" to print, you'd mark greet() virtual in Base, which switches the call to dynamic dispatch based on the object's real type at runtime.",
   },
   {
     id: "q-cpp-template-001",
@@ -2492,6 +2620,8 @@ export const QUESTIONS = [
       "Reach for templates (compile-time, 'static' polymorphism) when you want zero runtime overhead and the set of types is known at compile time; reach for virtual functions (runtime, 'dynamic' polymorphism) when you need to select behavior for types not known until runtime, e.g. through a plugin or container of mixed derived objects.",
     lesson:
       "Templates achieve generic code via monomorphization: the compiler generates a distinct, fully-typed function (or class) for every concrete type the template is instantiated with, so calls have no runtime dispatch cost — but this can increase binary size and compile time, and every type must be known at compile time. Virtual functions achieve generic code via dynamic dispatch through a vtable at runtime, which supports types decided at runtime (e.g. loaded from user input or a plugin) at the cost of a small indirect-call overhead and shared, non-duplicated code.",
+    remember: "Templates vs virtual functions: templates monomorphize at compile time for zero runtime cost but bigger binaries, while virtual dispatch shares one function with a small runtime indirection cost for types unknown until runtime.",
+    interviewAnswer: "Templates let the compiler generate a separate, fully-typed version of the function for each type it's instantiated with, so there's zero runtime dispatch overhead — the tradeoff is longer compile times and potential code bloat since every instantiation duplicates the function body. Virtual functions instead use a single shared function selected at runtime through a vtable, which costs a small indirect call but supports types that aren't even known until the program is running, like plugins or polymorphic containers. So the real choice is compile-time genericity with speed versus runtime flexibility with a tiny dispatch cost.",
   },
   {
     id: "q-cpp-exception-001",
@@ -2530,6 +2660,8 @@ export const QUESTIONS = [
       "Prefer RAII over manual try/catch-and-cleanup wherever possible: `std::unique_ptr<Resource> r(new Resource());` guarantees `delete` runs via the destructor on every exit path — normal return, early return, or exception — without writing a single catch block.",
     lesson:
       "Manual `try { ... } catch (...) { cleanup(); throw; }` is functionally correct but doesn't scale: every function that acquires a raw resource needs its own copy of this boilerplate, and it's easy to forget. RAII solves exception safety structurally: tie the resource to an object whose destructor performs cleanup, and the language guarantees that destructor runs during stack unwinding on any exit path — no explicit catch block required, and no detail to forget at each call site.",
+    remember: "Manual try/catch-rethrow-cleanup works but doesn't scale — RAII via smart pointers guarantees cleanup on every exit path automatically, without repeating boilerplate at every call site.",
+    interviewAnswer: "The try/catch wrapper does technically fix the leak — catch(...) catches anything doWork throws, and the bare throw correctly rethrows the original exception — but it's boilerplate you'd have to repeat at every single place a raw resource gets acquired, which doesn't scale and is easy to forget. The cleaner, idiomatic fix is to wrap the resource in a unique_ptr, so its destructor handles cleanup automatically whether the function returns normally, returns early, or an exception propagates through. That's the core idea behind RAII — tie resource lifetime to object lifetime and let the language guarantee cleanup, instead of hand-writing catch blocks everywhere.",
   },
 
   // ----------------------------------------------------------------------------
@@ -2572,6 +2704,8 @@ export const QUESTIONS = [
       "Never use a mutable object (list, dict, set) as a default argument unless you specifically want shared state across calls. The standard idiom is `def add_item(item, bucket=None): if bucket is None: bucket = []`.",
     lesson:
       "In Python, default argument values are evaluated exactly once, at the time the `def` statement runs — not freshly on every call. For immutable defaults (numbers, strings, `None`) this is harmless since they can't be mutated in place. For mutable defaults like `[]` or `{}`, every call that omits the argument shares and mutates the *same* object, so changes persist across calls in a way that surprises most people coming from languages where default expressions re-evaluate per call.",
+    remember: "Default args are evaluated once at def time, not per call — mutable defaults silently persist state across calls; use `bucket=None` and create the list inside.",
+    interviewAnswer: "Default argument values in Python are evaluated exactly once, when the function is defined, not every time it's called. So if you use a mutable default like an empty list, every call that omits that argument shares the exact same list object, and mutations stick around between calls. The fix is the `None` sentinel pattern — default to `None` and create a fresh list inside the function body if it wasn't passed.",
   },
   {
     id: "q-py-gil-001",
@@ -2610,6 +2744,8 @@ export const QUESTIONS = [
       "Use `threading` for I/O-bound concurrency (network calls, file I/O, waiting) where the GIL is released during the wait; use `multiprocessing` (or a C-extension that releases the GIL, like NumPy's vectorized ops) for CPU-bound parallelism that needs to use multiple cores.",
     lesson:
       "CPython's Global Interpreter Lock (GIL) ensures only one thread executes Python bytecode at any instant within a process, mainly to keep reference counting and the interpreter's internals thread-safe without per-object locks. This makes `threading` great for I/O-bound tasks (the GIL is released while waiting on I/O, letting other threads run) but ineffective for CPU-bound parallel speedup, since CPU-bound threads spend all their time wanting the GIL, not waiting. `multiprocessing` works around this by using multiple OS processes, each with its own interpreter and GIL, enabling genuine multi-core CPU parallelism at the cost of process-level overhead and no shared memory by default.",
+    remember: "Threads vs processes for CPU-bound work: GIL serializes one process's bytecode execution, so threading helps I/O-bound waits but multiprocessing is what actually buys you multi-core CPU speedup.",
+    interviewAnswer: "CPython has a Global Interpreter Lock that only lets one thread execute Python bytecode at a time within a process, so spinning up multiple threads for CPU-heavy work doesn't get you real parallelism — they're all fighting over the same lock. Threading still shines for I/O-bound work because the GIL gets released while a thread waits on a socket or disk. To actually use multiple cores for CPU-bound work, you need multiprocessing, since each process gets its own interpreter and its own GIL.",
   },
   {
     id: "q-py-identity-001",
@@ -2648,6 +2784,8 @@ export const QUESTIONS = [
       "Use `==` to ask 'do these have the same value?' and `is` to ask 'are these literally the same object?' A common correct use of `is` is comparing against singletons like `None`: `if x is None:` rather than `if x == None:`.",
     lesson:
       "`==` invokes the `__eq__` method, which by default (and for built-ins like `list`) compares values/contents for equality. `is` checks object identity — whether two references point to the exact same object in memory, equivalent to comparing `id(a) == id(b)`. Two separately constructed objects with equal contents (like `[1,2,3]` and `[1,2,3]`) are `==` but not `is`, since each list literal creates a new, distinct object.",
+    remember: "`==` asks \"same value?\" (calls `__eq__`), `is` asks \"same object?\" (compares memory identity) — use `is` only for singletons like `None`.",
+    interviewAnswer: "`==` and `is` are answering completely different questions — `==` calls `__eq__` and compares the contents or value of two objects, while `is` compares identity, basically asking if two names point to the exact same object in memory. Two separate list literals with identical contents will be equal but not identical, since each literal creates its own object. That's why the convention is to use `is` specifically for things like `None` checks, where you genuinely care about object identity, not value equality.",
   },
   {
     id: "q-py-generator-001",
@@ -2686,6 +2824,8 @@ export const QUESTIONS = [
       "Default to generator expressions (or generator functions with `yield`) over list comprehensions whenever you're going to iterate over the result just once and don't need random access or to know its length in advance — especially for large or unbounded data sources.",
     lesson:
       "A list comprehension builds and holds the entire resulting collection in memory before you can do anything with it. A generator expression (or a `yield`-based generator function) instead produces values lazily: each value is computed only when requested by the iteration, and previous values can be garbage-collected immediately afterward since nothing holds the whole sequence at once. This makes generators ideal for large or streaming data where the full collection would never fit in memory, at the cost of being single-pass (you can't re-iterate a generator without rebuilding it) and not supporting indexing or `len()`.",
+    remember: "List comprehension materializes everything upfront; generator expression yields lazily one item at a time — for huge or streaming data, generators keep memory flat regardless of input size.",
+    interviewAnswer: "A list comprehension has to build the entire result in memory before you can use any of it, so processing something like a 50GB file that way means trying to hold all of it at once, which blows up. A generator expression instead produces one value at a time, on demand, so only a small amount of data is in memory at any given moment as you iterate. The tradeoff is that a generator is single-pass and doesn't support indexing or `len()`, but for a one-time streaming pass over huge data, that tradeoff is exactly what you want.",
   },
   {
     id: "q-py-copy-001",
@@ -2724,6 +2864,8 @@ export const QUESTIONS = [
       "Use `copy.deepcopy` (or rebuild nested structures explicitly) whenever your data contains nested mutable objects and you need full independence between the original and the copy. For flat structures of immutables, a shallow copy is sufficient and cheaper.",
     lesson:
       "`copy.copy` (a shallow copy) creates a new container object but populates it with references to the *same* elements as the original — for a list of immutables (ints, strings) this looks indistinguishable from a deep copy because immutables can't be mutated in place anyway. But for a list of lists (or any nested mutable structure), the inner lists are shared objects: mutating an inner list via the copy is visible via the original too, since both outer lists point at identical inner list objects. `copy.deepcopy` instead recursively copies every nested level, producing a fully independent structure.",
+    remember: "Shallow copy duplicates only the outer container — nested mutables stay shared; deep copy recursively clones everything down to the leaves.",
+    interviewAnswer: "`copy.copy` gives you a new outer list, but it doesn't recurse into nested structures — it just copies references to the same inner objects. So if you have a list of lists and shallow-copy it, mutating an inner list through the copy is visible through the original too, because both outer lists are pointing at the identical inner list object. If you need full independence at every level, you reach for `copy.deepcopy`, which recursively copies nested mutable structures instead of just the top layer.",
   },
   {
     id: "q-py-decorator-001",
@@ -2762,6 +2904,8 @@ export const QUESTIONS = [
       "Always decorate your wrapper function with `@functools.wraps(func)` inside a custom decorator — it's a one-line fix that preserves `__name__`, `__doc__`, `__module__`, and other metadata, which matters for debugging, documentation generators, and anything that introspects functions.",
     lesson:
       "`@log_calls` applied to `greet` is sugar for `greet = log_calls(greet)`, which rebinds the name `greet` to the `wrapper` function object returned by the decorator — a genuinely different function object with its own `__name__` ('wrapper') and `__doc__` (`None`, since `wrapper` has no docstring). `functools.wraps(func)`, applied as a decorator on `wrapper` itself, copies over `func`'s `__name__`, `__doc__`, `__module__`, and other metadata so introspection tools see the original function's identity rather than the wrapper's.",
+    remember: "A decorator that returns `wrapper` replaces the original function's identity entirely — slap `@functools.wraps(func)` on the wrapper to restore `__name__`/`__doc__`.",
+    interviewAnswer: "When you apply a decorator, you're really just rebinding the name to whatever function the decorator returns, which in a hand-written decorator is usually the inner `wrapper` function — so introspection attributes like `__name__` and `__doc__` now reflect `wrapper`, not the original function. That breaks anything relying on those attributes, like documentation tools or debuggers. The standard fix is to decorate the wrapper itself with `functools.wraps(func)`, which copies over the original function's metadata so it looks like the original from the outside.",
   },
   {
     id: "q-py-scope-001",
@@ -2800,6 +2944,8 @@ export const QUESTIONS = [
       "To capture the loop variable's *current* value per iteration, give each lambda/function its own parameter with that value as a default: `lambda i=i: i` — default argument values *are* evaluated immediately at definition time, which is exactly the difference that fixes this.",
     lesson:
       "Python closures capture variables, not values — a closure remembers a reference to the enclosing scope's variable, and looks it up fresh every time the closure is called, not at the moment it was created. In a loop, `i` is one single variable that gets reassigned each iteration; all three lambdas close over that same variable, so when they're eventually called (after the loop has finished and `i` is 2), they all see the loop's final value. This is sometimes called 'late binding' in closures, and it's a frequent surprise for anyone expecting value-capture-at-creation semantics like some other languages.",
+    remember: "Closures capture variables by reference, not by value at creation time — late binding means all lambdas in a loop see the loop variable's final value, not its value at the time each lambda was made.",
+    interviewAnswer: "Closures in Python capture the variable itself, not a snapshot of its value at the moment the function was created — so when a lambda inside a loop body references the loop variable, it's actually holding a reference to that one shared variable, and it looks up its current value only when called. By the time you call all three lambdas after the loop ends, that variable has already settled at its final value, so they all return the same thing. The standard fix is to force early binding by giving each lambda a default argument, like `lambda i=i: i`, since default values are evaluated immediately when the function is defined.",
   },
   {
     id: "q-py-args-001",
@@ -2838,6 +2984,8 @@ export const QUESTIONS = [
       "`*args`/`**kwargs` are most useful for wrapper/decorator functions and APIs that need to forward arbitrary arguments to another function (`return inner(*args, **kwargs)`), without needing to know or restate that function's exact parameter list.",
     lesson:
       "In a function signature, a parameter prefixed with `*` (conventionally named `args`) collects any extra positional arguments beyond the explicitly named ones into a tuple. A parameter prefixed with `**` (conventionally `kwargs`) collects any keyword arguments that don't match a named parameter into a dict. Explicitly named parameters (like `name` here) are matched first and don't end up duplicated inside `*args`/`**kwargs`.",
+    remember: "`*args` collects extra positionals into a tuple; `**kwargs` collects extra keywords into a dict — named parameters get matched first and never duplicate into either.",
+    interviewAnswer: "When you define a function with `*args` and `**kwargs` after some named parameters, Python first matches the named parameters against whatever was passed, and only the leftovers get swept up — extra positional arguments go into the `args` tuple, and extra keyword arguments go into the `kwargs` dict. So a named parameter like `name` never shows up duplicated inside either of those. This pattern is especially useful for decorators or wrapper functions that need to transparently forward whatever arguments they receive to another function.",
   },
   {
     id: "q-py-context-001",
@@ -2876,6 +3024,8 @@ export const QUESTIONS = [
       "Use `with` for any resource that needs guaranteed cleanup — files, locks, network connections, database transactions — anywhere you'd otherwise need a manual `try/finally`. It's Python's structural answer to the same problem C++'s RAII solves.",
     lesson:
       "A context manager defines `__enter__` (run when entering the `with` block) and `__exit__` (run when leaving it, for *any* reason — normal completion, `return`, `break`, or an exception unwinding through it). File objects implement this protocol so `with open(...) as f:` guarantees `f.close()` runs on every exit path, eliminating the class of bug where an exception causes manual cleanup code to be skipped. It's conceptually the same guarantee that C++ RAII destructors provide, just expressed through an explicit protocol instead of object lifetime.",
+    remember: "`with` guarantees `__exit__` runs on any exit path — normal, return, break, or exception — same safety net as `try/finally`, without writing it by hand.",
+    interviewAnswer: "A `with` block relies on the context manager protocol — `__enter__` runs when you enter the block, and critically `__exit__` is guaranteed to run when you leave it, no matter how you leave, whether that's falling off the end normally or an exception blowing through. That's exactly what closes the file reliably, even if `process(data)` raises partway through, which a plain `open()`/`close()` pair can't guarantee. It's basically Python's structured answer to the same problem `try/finally` solves manually, or what RAII solves in C++ through object lifetime.",
   },
   {
     id: "q-py-mro-001",
@@ -2914,6 +3064,8 @@ export const QUESTIONS = [
       "You can always check a class's exact resolution order yourself with `D.__mro__` or `D.mro()` rather than reasoning about it from the class hierarchy diagram — it removes any ambiguity about which parent 'wins' for diamond inheritance.",
     lesson:
       "When a class has multiple base classes, Python doesn't search them in some ad hoc or depth-first way that could revisit a shared ancestor multiple times or hit ambiguity — it computes one linear Method Resolution Order via the C3 linearization algorithm, respecting both each base's own MRO and the order bases were listed in the subclass. For `class D(B, C)` with both deriving from `A`, the MRO is `[D, B, C, A, object]`: attribute/method lookup walks this list and returns the first match, so `B`'s `greet` wins over `C`'s and `A`'s simply because `B` appears first in `D`'s declared base list.",
+    remember: "Diamond inheritance resolves via C3 linearization into one deterministic MRO list — lookup just walks it in order; declaration order of bases in the subclass decides who wins.",
+    interviewAnswer: "When a class inherits from multiple parents that share a common ancestor, Python doesn't pick a winner arbitrarily — it computes a single, deterministic Method Resolution Order using the C3 linearization algorithm, and method lookup just walks that list and stops at the first match. For `class D(B, C)` where both B and C inherit from A, the MRO ends up `[D, B, C, A, object]`, so `B`'s implementation wins simply because `B` was listed before `C` in the subclass definition. You can always check this directly with `D.__mro__` instead of reasoning it out by hand.",
   },
   {
     id: "q-py-classmethod-001",
@@ -2952,6 +3104,8 @@ export const QUESTIONS = [
       "A good rule of thumb: use `@staticmethod` for a utility function that's logically grouped with the class but doesn't need `self` or `cls` at all; use `@classmethod` when the method needs to know or construct *the class itself*, especially for alternate constructors that should respect subclassing.",
     lesson:
       "`@staticmethod` defines a plain function attached to a class's namespace — it receives no implicit first argument, not `self` (instance) nor `cls` (class). `@classmethod` receives `cls`, the class it was actually called through, as its first argument; when called via a subclass, `cls` is that subclass, not the class where the method was defined. This makes `@classmethod` the right tool for factory/alternate-constructor methods, since `cls(...)` inside the method constructs whichever class was used to call it, correctly supporting subclasses without any extra logic.",
+    remember: "`@staticmethod` gets neither `self` nor `cls`; `@classmethod` gets `cls` — use classmethod for alternate constructors so `cls(...)` builds whichever subclass it was actually called on.",
+    interviewAnswer: "A `staticmethod` is just a plain function namespaced under the class — it doesn't receive `self` or `cls`, so it has no way of knowing what class it was even called through. A `classmethod`, on the other hand, receives `cls` as its first argument, and when called via a subclass, `cls` is that subclass, not the original defining class. That makes classmethod the right choice for factory-style constructors, since calling `cls(...)` inside the method naturally builds whatever subclass it was invoked on, like `AdminUser.from_csv_row(...)` correctly returning an `AdminUser`.",
   },
   {
     id: "q-py-gc-001",
@@ -2990,6 +3144,731 @@ export const QUESTIONS = [
       "Reference cycles in Python are usually not a leak risk thanks to the cyclic GC, but if you're managing non-memory resources (file handles, sockets) inside cyclically-referenced objects, don't rely on `__del__` timing — use explicit `close()`/context managers, since cyclic collection timing is less predictable than refcounting-based collection.",
     lesson:
       "CPython primarily reclaims memory via reference counting: every object tracks how many references point to it, and is freed the instant that count hits zero. This alone can't collect reference cycles, since each object in the cycle keeps another's count above zero indefinitely. CPython solves this with a separate, generational cycle-detecting garbage collector (exposed via the `gc` module) that periodically scans for groups of objects unreachable from outside the group except through each other, and frees them as a batch — meaning ordinary reference cycles, unlike raw-pointer or `shared_ptr` cycles in lower-level languages, generally don't leak in long-running Python programs.",
+    remember: "Refcounting alone can't collect cycles (each object's count stays above zero) — CPython's generational cyclic GC is the separate mechanism that finds and frees those cycles automatically.",
+    interviewAnswer: "CPython's primary memory management is reference counting, which frees an object the instant its count drops to zero, but two objects referencing each other will keep each other's count above zero forever, even when nothing else points to them. To handle that, CPython has a separate generational garbage collector that periodically scans for these unreachable cycles and frees them as a batch, so this kind of cycle doesn't actually leak the way it would with raw pointers or something like a `shared_ptr` cycle in C++. The one caveat is that if those cyclic objects hold non-memory resources like open file handles, you shouldn't rely on `__del__` timing — better to use explicit `close()` or a context manager.",
+  },
+  // ----------------------------------------------------------------------------
+  // OA Logic
+  // ----------------------------------------------------------------------------
+  {
+    id: "q-oa-series-001",
+    subject: "OA",
+    concept: "Number Series",
+    difficulty: "easy",
+    stem:
+      "Find the missing number in the series: 3, 7, 15, 31, 63, ?",
+    options: [
+      {
+        text: "95",
+        sub: "Adds 32 after 63",
+        fix:
+          "The differences are 4, 8, 16, 32, so the next difference should be 64, not another nearby jump like 32.",
+      },
+      {
+        text: "127",
+        sub: "Double the previous number and add 1",
+        fix: "",
+      },
+      {
+        text: "126",
+        sub: "Double the previous number",
+        fix:
+          "Every step is double plus one: 3 to 7, 7 to 15, and so on. Plain doubling misses the added 1.",
+      },
+      {
+        text: "128",
+        sub: "Powers of two pattern",
+        fix:
+          "The terms are one less than powers of two after the first step, so 127 fits; 128 would be the power itself.",
+      },
+    ],
+    correctIndex: 1,
+    proTip:
+      "For OA series, check differences and multiplication patterns before doing heavy arithmetic. Here both point to x2 + 1.",
+    lesson:
+      "The pattern is 3 x 2 + 1 = 7, 7 x 2 + 1 = 15, 15 x 2 + 1 = 31, and 31 x 2 + 1 = 63. Applying the same rule gives 63 x 2 + 1 = 127. Series questions often hide a simple repeated operation behind fast-growing numbers.",
+    remember: "When a number series grows fast, test \"double plus a constant\" before chasing differences — check if each term equals 2x the previous term plus a fixed offset.",
+    interviewAnswer: "I looked at consecutive terms and noticed each one was almost double the one before, so I tested the rule term times two plus one — 3 to 7, 7 to 15, 15 to 31, 63 — and it held every time. Applying that same rule to 63 gives 63 times 2 plus 1, which is 127, so that's the missing number.",
+  },
+  {
+    id: "q-oa-series-002",
+    subject: "OA",
+    concept: "Letter Series",
+    difficulty: "medium",
+    stem:
+      "Which letters complete the series: AZ, BY, CX, DW, ?",
+    options: [
+      {
+        text: "EV",
+        sub: "First letter moves forward, second moves backward",
+        fix: "",
+      },
+      {
+        text: "EU",
+        sub: "Second letter skips one extra step",
+        fix:
+          "The second letters go Z, Y, X, W, so the next is V. There is no extra skip.",
+      },
+      {
+        text: "FV",
+        sub: "First letter skips E",
+        fix:
+          "The first letters move one step at a time: A, B, C, D, then E.",
+      },
+      {
+        text: "EW",
+        sub: "Second letter stays fixed",
+        fix:
+          "W was already used in the fourth term. The second position is descending one letter each time.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Split letter pairs into independent tracks. One side can move forward while the other moves backward.",
+    lesson:
+      "Treat each position separately. The first letters are A, B, C, D, so the next first letter is E. The second letters are Z, Y, X, W, so the next second letter is V. Combining them gives EV.",
+    remember: "For letter-pair series, split each pair into two independent alphabet tracks and find the step for each position separately, since one side can move forward while the other moves backward.",
+    interviewAnswer: "I separated the pairs into a first-letter track and a second-letter track instead of treating each pair as one unit. The first letters go A, B, C, D so the next is E, and the second letters go Z, Y, X, W so the next is V, which gives EV as the answer.",
+  },
+  {
+    id: "q-oa-arrange-001",
+    subject: "OA",
+    concept: "Seating Arrangement",
+    difficulty: "medium",
+    stem:
+      "Five people A, B, C, D, and E sit in a row facing north. B is immediately to the right of A. C is at the right end. D is at the left end. E sits between B and C. Who sits in the middle?",
+    options: [
+      {
+        text: "B",
+        sub: "A-B pair placed after the left end",
+        fix: "",
+      },
+      {
+        text: "C",
+        sub: "C is fixed at the right end",
+        fix:
+          "C is fixed at the right end, so it cannot be the middle person.",
+      },
+      {
+        text: "E",
+        sub: "E between B and C",
+        fix:
+          "E is between B and C, but between does not mean exactly middle of the whole row. In D A B E C, E is fourth.",
+      },
+      {
+        text: "A",
+        sub: "A sits before B",
+        fix:
+          "A must be immediately left of B, but D already takes the left end. That makes A second and B third.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Anchor fixed positions first, then place immediate pairs. Do not let a clue like 'between' override the row positions you already fixed.",
+    lesson:
+      "D is fixed at the left end and C is fixed at the right end. Since B is immediately to the right of A, the A-B pair must occupy positions 2 and 3. E must sit between B and C, so E goes in position 4. The row is D A B E C, making B the middle person.",
+    remember: "In seating puzzles, place the fixed-end clues first, then immediate-neighbor pairs, and only apply vaguer clues like \"between\" last so they don't override positions you already locked in.",
+    interviewAnswer: "I started with the two anchors — D at the left end and C at the right end — since those are fixed no matter what. The \"B immediately right of A\" clue forced the A-B pair into positions two and three, which left position four for E since E had to sit between B and C, giving the order D A B E C, so B is in the middle.",
+  },
+  {
+    id: "q-oa-syllogism-001",
+    subject: "OA",
+    concept: "Syllogisms",
+    difficulty: "medium",
+    stem:
+      "Statements: All coders are learners. Some learners are artists. Conclusions: I. Some coders are artists. II. Some learners are coders. Which conclusion follows?",
+    options: [
+      {
+        text: "Only I follows",
+        sub: "Assumes overlap between coders and artists",
+        fix:
+          "Some learners are artists does not guarantee that those learners are coders. The artist group may be separate from the coder group.",
+      },
+      {
+        text: "Only II follows",
+        sub: "All coders being learners implies some learners are coders",
+        fix: "",
+      },
+      {
+        text: "Both I and II follow",
+        sub: "Treats all groups as overlapping",
+        fix:
+          "Conclusion I is not forced. The statements allow coders and artists to be separate subgroups inside learners.",
+      },
+      {
+        text: "Neither follows",
+        sub: "Rejects the reverse relation completely",
+        fix:
+          "If all coders are learners, then at least the coders are learners. In standard syllogism assumptions where the class exists, some learners are coders follows.",
+      },
+    ],
+    correctIndex: 1,
+    proTip:
+      "In syllogisms, only accept what must be true in every valid diagram. Possible overlap is not the same as guaranteed overlap.",
+    lesson:
+      "All coders are inside learners. Some learners are artists, but that artist subset may or may not overlap with coders, so conclusion I does not necessarily follow. Since coders are learners, some learners are coders follows under the usual non-empty class assumption.",
+    remember: "In syllogisms, only accept a conclusion if it's true in every possible diagram of the statements — \"some X are Y\" never forces \"some X are Z\" through an unrelated overlapping group.",
+    interviewAnswer: "Conclusion I assumes the artists who are learners must overlap with the coders, but the statements never guarantee that, so it doesn't follow. Conclusion II does follow because every coder is already a learner, so under the standard assumption that the coder group isn't empty, that automatically means some learners are coders.",
+  },
+  {
+    id: "q-oa-coding-001",
+    subject: "OA",
+    concept: "Coding-Decoding",
+    difficulty: "easy",
+    stem:
+      "In a code language, CAT is written as DBU. How will DOG be written using the same rule?",
+    options: [
+      {
+        text: "EPH",
+        sub: "Each letter moves one step forward",
+        fix: "",
+      },
+      {
+        text: "C N F",
+        sub: "Each letter moves one step backward",
+        fix:
+          "CAT to DBU moves C to D, A to B, and T to U, so the rule is forward, not backward.",
+      },
+      {
+        text: "EOG",
+        sub: "Only the first letter changes",
+        fix:
+          "All letters changed in CAT to DBU. D, O, and G must each move forward.",
+      },
+      {
+        text: "FQI",
+        sub: "Each letter moves two steps forward",
+        fix:
+          "CAT to DBU is a one-step shift, not a two-step shift.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "For coding-decoding, write the alphabet shifts beside each letter. Confirm the same shift applies to every position.",
+    lesson:
+      "CAT becomes DBU by shifting every letter one position forward: C to D, A to B, T to U. Applying the same rule to DOG gives D to E, O to P, and G to H, so the answer is EPH.",
+    remember: "For coding-decoding, write the letter shift for each position in the example word and confirm the same shift size and direction repeats before applying it to the new word.",
+    interviewAnswer: "I compared CAT to DBU letter by letter and saw every letter moved exactly one step forward in the alphabet — C to D, A to B, T to U. Applying that same forward shift to D, O, and G gives E, P, and H, so DOG becomes EPH.",
+  },
+  {
+    id: "q-oa-blood-001",
+    subject: "OA",
+    concept: "Blood Relations",
+    difficulty: "medium",
+    stem:
+      "Pointing to a photo, Ravi says, 'She is the daughter of my mother's only son.' If Ravi is male, how is the girl in the photo related to Ravi?",
+    options: [
+      {
+        text: "Sister",
+        sub: "Daughter of Ravi's mother",
+        fix:
+          "The phrase is daughter of my mother's only son. Since Ravi is male and the only son, that person is Ravi himself, not Ravi's mother.",
+      },
+      {
+        text: "Daughter",
+        sub: "Daughter of Ravi himself",
+        fix: "",
+      },
+      {
+        text: "Niece",
+        sub: "Daughter of Ravi's brother",
+        fix:
+          "There is no brother here. The clue says the mother's only son, and Ravi is male, so it points to Ravi.",
+      },
+      {
+        text: "Cousin",
+        sub: "Child of a relative in the same generation",
+        fix:
+          "No aunt or uncle is introduced. The relation collapses directly to Ravi's own daughter.",
+      },
+    ],
+    correctIndex: 1,
+    proTip:
+      "Reduce blood relation clues from the inside out. 'My mother's only son' is the key phrase.",
+    lesson:
+      "Start with 'my mother's only son.' Since Ravi is male and is the only son of his mother, that phrase refers to Ravi. The girl is the daughter of Ravi, so she is Ravi's daughter.",
+    remember: "Collapse blood-relation chains from the innermost phrase outward — \"my mother's only son,\" when the speaker is male, almost always resolves to the speaker himself.",
+    interviewAnswer: "I worked from the inside out, starting with \"my mother's only son.\" Since Ravi is male and is his mother's only son, that phrase just means Ravi himself, so the girl described as that person's daughter is simply Ravi's own daughter.",
+  },
+  {
+    id: "q-oa-directions-001",
+    subject: "OA",
+    concept: "Directions",
+    difficulty: "easy",
+    stem:
+      "A person walks 5 km east, then turns left and walks 3 km, then turns left again and walks 5 km. How far and in which direction is the person from the starting point?",
+    options: [
+      {
+        text: "3 km north",
+        sub: "East-west movement cancels out",
+        fix: "",
+      },
+      {
+        text: "3 km south",
+        sub: "Left from east treated as south",
+        fix:
+          "Facing east, a left turn points north, not south.",
+      },
+      {
+        text: "5 km west",
+        sub: "Only the last segment counted",
+        fix:
+          "The first 5 km east and final 5 km west cancel each other. The remaining displacement is the 3 km north segment.",
+      },
+      {
+        text: "8 km north-east",
+        sub: "Adds all distances",
+        fix:
+          "Direction problems ask displacement, not total walking distance. Opposite horizontal segments cancel.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Track net displacement on east-west and north-south axes. Total distance walked is usually a trap.",
+    lesson:
+      "After walking 5 km east, the person turns left, which means north, and walks 3 km. A second left turn from north points west, and walking 5 km west cancels the original 5 km east. The only net movement is 3 km north.",
+    remember: "In direction problems, track only net east-west and north-south displacement on two axes — total distance walked is a distractor, and opposite horizontal or vertical legs cancel out.",
+    interviewAnswer: "I tracked the turns relative to facing east: a left turn from east points north, and a second left turn from north points west. The first 5 km east and the final 5 km west cancel each other exactly, leaving only the 3 km north leg as the net displacement.",
+  },
+  {
+    id: "q-oa-conclusion-001",
+    subject: "OA",
+    concept: "Statement Conclusions",
+    difficulty: "medium",
+    stem:
+      "Statement: 'The company will shortlist candidates who solve at least 70% of the OA correctly.' Conclusion I: Solving 70% guarantees shortlisting. Conclusion II: Solving below 70% means the candidate will not be shortlisted under this rule. Which follows?",
+    options: [
+      {
+        text: "Only I follows",
+        sub: "Reads the threshold as sufficient",
+        fix:
+          "The statement says candidates who solve at least 70% will be shortlisted, so I follows. But the wording also creates a cutoff for this rule.",
+      },
+      {
+        text: "Only II follows",
+        sub: "Reads only the rejection side",
+        fix:
+          "The statement directly says the at-least-70 group will be shortlisted, so I also follows.",
+      },
+      {
+        text: "Both I and II follow",
+        sub: "Threshold defines the shortlist condition in this rule",
+        fix: "",
+      },
+      {
+        text: "Neither follows",
+        sub: "Treats shortlist as unrelated to score",
+        fix:
+          "The statement explicitly links shortlist status to solving at least 70% correctly.",
+      },
+    ],
+    correctIndex: 2,
+    proTip:
+      "For statement-conclusion questions, stay inside the sentence. Do not add real-world hiring exceptions unless the statement mentions them.",
+    lesson:
+      "The statement defines a rule: candidates who solve at least 70% are shortlisted. That supports conclusion I. Under the same rule, a score below 70% does not meet the stated condition, so conclusion II follows as well.",
+    remember: "For statement-conclusion questions, stay strictly inside the wording of the rule given — don't import outside hiring or real-world exceptions that the statement never mentions.",
+    interviewAnswer: "The statement directly says candidates scoring at least 70% will be shortlisted, so conclusion I follows immediately from the rule as written. Since that same rule defines the cutoff, scoring below 70% means the stated condition isn't met, so conclusion II follows too — both are just two sides of the same threshold.",
+  },
+  {
+    id: "q-oa-odd-001",
+    subject: "OA",
+    concept: "Odd One Out",
+    difficulty: "easy",
+    stem:
+      "Choose the odd one out: 121, 144, 169, 196, 225, 256, 289, 315",
+    options: [
+      {
+        text: "169",
+        sub: "Middle square",
+        fix:
+          "169 is 13 squared, so it belongs with the perfect squares.",
+      },
+      {
+        text: "225",
+        sub: "Largest odd square here",
+        fix:
+          "225 is 15 squared, so it follows the same perfect-square pattern.",
+      },
+      {
+        text: "315",
+        sub: "Not a perfect square",
+        fix: "",
+      },
+      {
+        text: "289",
+        sub: "Prime-looking ending",
+        fix:
+          "289 is 17 squared. It is a perfect square like the others except 315.",
+      },
+    ],
+    correctIndex: 2,
+    proTip:
+      "Odd-one-out questions often use a clean category with one noisy item. Check squares, cubes, primes, parity, and divisibility quickly.",
+    lesson:
+      "121, 144, 169, 196, 225, 256, and 289 are perfect squares from 11 squared through 17 squared. 315 is not a perfect square, so it is the odd one out.",
+    remember: "For odd-one-out number sets, quickly test whether the group is perfect squares, cubes, or another clean category, then check which single value breaks that pattern.",
+    interviewAnswer: "I checked each number against being a perfect square and found 121, 144, 169, 196, 225, 256, and 289 are exactly 11 squared through 17 squared. 315 doesn't fit that square pattern at all, so it's the odd one out.",
+  },
+  {
+    id: "q-oa-venn-001",
+    subject: "OA",
+    concept: "Venn Reasoning",
+    difficulty: "medium",
+    stem:
+      "In a group of 40 students, 24 like Java, 18 like Python, and 10 like both. How many like exactly one of the two languages?",
+    options: [
+      {
+        text: "14",
+        sub: "Counts only the Java-only group",
+        fix:
+          "Exactly one means Java-only plus Python-only. Java-only is 14 and Python-only is 8.",
+      },
+      {
+        text: "32",
+        sub: "Counts anyone who likes at least one",
+        fix:
+          "24 + 18 - 10 = 32 counts students who like at least one language. It includes the 10 who like both, so it is not exactly one.",
+      },
+      {
+        text: "30",
+        sub: "Subtracts both once from total likes",
+        fix:
+          "The total likes count 42 includes the both group twice. Exactly one is 42 - 2 x 10 = 22.",
+      },
+      {
+        text: "22",
+        sub: "Java-only 14 plus Python-only 8",
+        fix: "",
+      },
+    ],
+    correctIndex: 3,
+    proTip:
+      "For exactly-one questions, subtract the overlap from each set before adding. At-least-one and exactly-one are different.",
+    lesson:
+      "Java-only students are 24 - 10 = 14. Python-only students are 18 - 10 = 8. Students who like exactly one language are 14 + 8 = 22.",
+    remember: "For \"exactly one\" Venn questions, subtract the overlap from each individual set first, then add those two exclusive counts — don't just add totals or subtract overlap once from the sum.",
+    interviewAnswer: "I found the Java-only group by subtracting the overlap from total Java likers, 24 minus 10 equals 14, and did the same for Python, 18 minus 10 equals 8. Adding those two exclusive groups, 14 plus 8, gives 22 students who like exactly one language.",
+  },
+  {
+    id: "q-oa-ranking-001",
+    subject: "OA",
+    concept: "Ranking",
+    difficulty: "easy",
+    stem:
+      "Asha is 12th from the top and 19th from the bottom in a class ranking. How many students are in the class?",
+    options: [
+      {
+        text: "30",
+        sub: "Top rank + bottom rank - 1",
+        fix: "",
+      },
+      {
+        text: "31",
+        sub: "Adds both ranks directly",
+        fix:
+          "Asha is counted in both the top-side and bottom-side counts, so subtract 1.",
+      },
+      {
+        text: "29",
+        sub: "Subtracts 2 instead of 1",
+        fix:
+          "Only Asha is double-counted once. The formula is top + bottom - 1.",
+      },
+      {
+        text: "32",
+        sub: "Adds an extra student on each side",
+        fix:
+          "Rank positions already include Asha. There is no extra boundary student to add.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Ranking from both ends uses total = top position + bottom position - 1, because the target person is counted twice.",
+    lesson:
+      "There are 11 students above Asha and 18 below her. Including Asha gives 11 + 1 + 18 = 30. Equivalently, 12 + 19 - 1 = 30.",
+    remember: "When given rank-from-top and rank-from-bottom, use total students equals top rank plus bottom rank minus one, since the target person is counted in both counts.",
+    interviewAnswer: "Asha's position is counted once from the top and once from the bottom, so simply adding the two ranks double-counts her. Subtracting one for that overlap, 12 plus 19 minus 1, gives 30 total students in the class.",
+  },
+  {
+    id: "q-oa-data-001",
+    subject: "OA",
+    concept: "Data Sufficiency",
+    difficulty: "medium",
+    stem:
+      "Question: Is x greater than y? Statement I: x - y = 5. Statement II: y is negative. Which statements are sufficient?",
+    options: [
+      {
+        text: "Statement I alone is sufficient",
+        sub: "Difference directly proves x is larger",
+        fix: "",
+      },
+      {
+        text: "Statement II alone is sufficient",
+        sub: "Negative y makes x larger",
+        fix:
+          "Knowing y is negative says nothing definite about x. x could be more negative than y.",
+      },
+      {
+        text: "Both together are needed",
+        sub: "Combines difference and sign",
+        fix:
+          "Statement I already proves x is 5 more than y, so x must be greater than y. Statement II is unnecessary.",
+      },
+      {
+        text: "Even both together are insufficient",
+        sub: "Needs actual values",
+        fix:
+          "Actual values are not needed. A positive difference x - y = 5 proves the comparison.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "In data sufficiency, answer the exact question, not the value. A comparison can be settled without knowing either number.",
+    lesson:
+      "Statement I says x - y = 5, which means x is 5 greater than y, so it is sufficient. Statement II only says y is negative and gives no fixed relation between x and y, so it is not sufficient.",
+    remember: "In data sufficiency comparison questions, check whether a statement settles the exact question asked — a relation like a difference can answer \"is x greater than y\" without ever revealing the actual values.",
+    interviewAnswer: "Statement I tells me x minus y equals 5, which directly proves x is greater than y regardless of what the actual numbers are, so it's sufficient on its own. Statement II only says y is negative, which tells me nothing about how x compares to y since x could be even more negative, so it adds nothing and isn't needed.",
+  },
+  {
+    id: "q-oa-clock-001",
+    subject: "OA",
+    concept: "Clock Logic",
+    difficulty: "hard",
+    stem:
+      "At what angle are the hour and minute hands of a clock at 3:30?",
+    options: [
+      {
+        text: "75 degrees",
+        sub: "Hour hand has moved halfway from 3 to 4",
+        fix: "",
+      },
+      {
+        text: "90 degrees",
+        sub: "Treats hour hand as fixed at 3",
+        fix:
+          "At 3:30, the hour hand is not still on 3. It has moved halfway toward 4, reducing the angle.",
+      },
+      {
+        text: "60 degrees",
+        sub: "Subtracts too much hour-hand movement",
+        fix:
+          "The hour hand moves 0.5 degrees per minute, so in 30 minutes it moves 15 degrees, not 30.",
+      },
+      {
+        text: "105 degrees",
+        sub: "Adds the hour-hand movement",
+        fix:
+          "The minute hand is at 6 and the hour hand is between 3 and 4. The smaller angle is 180 - 105 = 75 degrees.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Clock questions punish fixed-hand assumptions. The hour hand moves 0.5 degrees every minute.",
+    lesson:
+      "At 3:30, the minute hand is at 180 degrees from 12. The hour hand is at 3.5 hour marks: 3 x 30 + 30 x 0.5 = 105 degrees from 12. The difference is 180 - 105 = 75 degrees.",
+    remember: "For clock-angle problems, remember the hour hand keeps moving between numbers at 0.5 degrees per minute — never treat it as parked on the hour.",
+    interviewAnswer: "At 3:30 the minute hand sits exactly at the 6, which is 180 degrees from 12, but the hour hand isn't still at 3 — it has crept halfway toward 4. Calculating its position as 3 times 30 plus 30 times 0.5 gives 105 degrees, and the gap between 180 and 105 is 75 degrees.",
+  },
+  {
+    id: "q-oa-arithmetic-001",
+    subject: "OA",
+    concept: "Arithmetic Logic",
+    difficulty: "medium",
+    stem:
+      "A price is increased by 20% and then decreased by 20%. What is the net effect on the original price?",
+    options: [
+      {
+        text: "No change",
+        sub: "Same percentages cancel",
+        fix:
+          "The second 20% is taken on the increased price, not the original price. Equal percent up and down do not cancel.",
+      },
+      {
+        text: "4% decrease",
+        sub: "1.2 x 0.8 = 0.96 of original",
+        fix: "",
+      },
+      {
+        text: "4% increase",
+        sub: "Adds percentage effects",
+        fix:
+          "The multiplier is 1.2 x 0.8 = 0.96, which is below 1. That means a decrease.",
+      },
+      {
+        text: "20% decrease",
+        sub: "Only the final change counted",
+        fix:
+          "Both changes matter. The final decrease is applied after the increase.",
+      },
+    ],
+    correctIndex: 1,
+    proTip:
+      "Use multipliers for percentage chains. Increase by 20% is x1.2; decrease by 20% is x0.8.",
+    lesson:
+      "Let the original price be 100. After a 20% increase it becomes 120. A 20% decrease on 120 is 24, so the final price is 96. That is 4 less than the original 100, giving a 4% decrease.",
+    remember: "For successive percentage changes, multiply the corresponding factors instead of adding percentages — increase by 20% is times 1.2 and decrease by 20% afterward is times 0.8 of the new value, not the original.",
+    interviewAnswer: "I converted both percentage changes into multipliers and chained them: 1.2 for the 20% increase, then 0.8 for the 20% decrease applied to the already-increased price. Multiplying 1.2 by 0.8 gives 0.96, which means the final price is 96% of the original, a net 4% decrease, not zero.",
+  },
+  {
+    id: "q-oa-puzzle-001",
+    subject: "OA",
+    concept: "Constraint Puzzle",
+    difficulty: "hard",
+    stem:
+      "Three boxes are labeled Red, Blue, and Green, but every label is wrong. You open the box labeled Red and find a blue ball. What color ball is in the box labeled Green?",
+    options: [
+      {
+        text: "Red",
+        sub: "Remaining labels must swap consistently",
+        fix: "",
+      },
+      {
+        text: "Blue",
+        sub: "Copies the opened box color",
+        fix:
+          "The opened box labeled Red already contains blue. There is only one blue box in this setup.",
+      },
+      {
+        text: "Green",
+        sub: "Matches the Green label",
+        fix:
+          "Every label is wrong, so the box labeled Green cannot contain green.",
+      },
+      {
+        text: "Cannot be determined",
+        sub: "Assumes multiple valid arrangements",
+        fix:
+          "Once the Red-labeled box is known to be blue, the remaining labels force a single swap: Green-labeled must be red and Blue-labeled must be green.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "When all labels are wrong, eliminate the label's own color first. One revealed mismatch often forces the rest.",
+    lesson:
+      "The box labeled Red contains blue, so blue is used. The remaining colors are red and green for the boxes labeled Blue and Green. Since the Green-labeled box cannot contain green, it must contain red.",
+    remember: "When every label on a set of boxes is guaranteed wrong, opening just one box and seeing its true contents usually forces every other label-to-content swap through elimination.",
+    interviewAnswer: "The box labeled Red actually contains blue, so blue is already assigned. Since every label is wrong, the Green-labeled box can't contain green, and the only remaining color left for it is red, which also forces the Blue-labeled box to contain green.",
+  },
+  {
+    id: "q-oa-input-001",
+    subject: "OA",
+    concept: "Input-Output Pattern",
+    difficulty: "medium",
+    stem:
+      "A machine rearranges words alphabetically from left to right, placing one word correctly at each step. Input: 'sun apple moon book'. What is Step II?",
+    options: [
+      {
+        text: "apple book sun moon",
+        sub: "Two alphabetically smallest words placed first",
+        fix: "",
+      },
+      {
+        text: "apple sun moon book",
+        sub: "Only Step I",
+        fix:
+          "Step I places apple first. Step II also places the next alphabetically smallest remaining word, book, second.",
+      },
+      {
+        text: "book apple moon sun",
+        sub: "Starts with second-smallest word",
+        fix:
+          "Alphabetical ordering begins with apple, not book.",
+      },
+      {
+        text: "apple book moon sun",
+        sub: "Fully sorted output",
+        fix:
+          "That is the final arrangement, not Step II. The machine places one word per step.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "For input-output questions, infer how much changes per step. Do not jump to the final sorted form unless the step number demands it.",
+    lesson:
+      "Alphabetically, the words are apple, book, moon, sun. If the machine places one word correctly at each step, Step I puts apple first: apple sun moon book. Step II puts book second while leaving the rest in prior order: apple book sun moon.",
+    remember: "For machine input-output step questions, figure out exactly how many words get placed per step and trace only that many moves — don't jump straight to the fully sorted output.",
+    interviewAnswer: "I first sorted the words alphabetically in my head — apple, book, moon, sun — and noted the machine places exactly one word correctly per step. Step I places apple first, giving apple sun moon book, and Step II places the next smallest word, book, into its position, giving apple book sun moon.",
+  },
+  {
+    id: "q-oa-analogy-001",
+    subject: "OA",
+    concept: "Analogy",
+    difficulty: "easy",
+    stem:
+      "Choose the pair that completes the analogy: Pen : Write :: Knife : ?",
+    options: [
+      {
+        text: "Cut",
+        sub: "Object matched to its primary function",
+        fix: "",
+      },
+      {
+        text: "Sharp",
+        sub: "Object matched to a property",
+        fix:
+          "Pen to write is object to function. Sharp is a property of a knife, not the matching function relation.",
+      },
+      {
+        text: "Steel",
+        sub: "Object matched to material",
+        fix:
+          "The first pair is not object to material. A pen may write regardless of material.",
+      },
+      {
+        text: "Kitchen",
+        sub: "Object matched to place",
+        fix:
+          "The relation is what the object does, not where it may be used.",
+      },
+    ],
+    correctIndex: 0,
+    proTip:
+      "Name the relation in the first pair before looking at options. Object-to-function is a common OA analogy pattern.",
+    lesson:
+      "A pen is used to write. Following the same object-to-function relation, a knife is used to cut. The other options describe a property, material, or place rather than the primary action.",
+    remember: "For object-pair analogies, name the relationship in the first pair in words first — object-to-function, object-to-property, or object-to-material — then match the same relationship type in the answer.",
+    interviewAnswer: "I named the relationship in pen to write as object matched to its main function, not a property or material. Applying that same function relationship to knife, the action it's primarily used for is to cut, which is why cut is the answer rather than sharp or steel.",
+  },
+  {
+    id: "q-oa-calendar-001",
+    subject: "OA",
+    concept: "Calendar Logic",
+    difficulty: "medium",
+    stem:
+      "If today is Wednesday, what day will it be 45 days from today?",
+    options: [
+      {
+        text: "Friday",
+        sub: "45 leaves remainder 3 when divided by 7",
+        fix:
+          "45 mod 7 is 3, and three days after Wednesday is Saturday, not Friday.",
+      },
+      {
+        text: "Saturday",
+        sub: "Move forward by the remainder after full weeks",
+        fix: "",
+      },
+      {
+        text: "Sunday",
+        sub: "Counts the starting day as day one",
+        fix:
+          "For '45 days from today', move forward 45 day changes. Do not count today as the first future day.",
+      },
+      {
+        text: "Monday",
+        sub: "Uses 46 days instead of 45",
+        fix:
+          "Only 45 days are added. Full weeks do not change the weekday, leaving a 3-day shift.",
+      },
+    ],
+    correctIndex: 1,
+    proTip:
+      "Reduce calendar jumps modulo 7. Then move only the remainder from the given weekday.",
+    lesson:
+      "There are 7 days in a week. 45 divided by 7 leaves a remainder of 3, so 45 days later is the same as 3 days later for weekday purposes. Wednesday plus 3 days is Saturday.",
+    remember: "For \"N days from today\" calendar questions, reduce N modulo 7 to find the effective shift, since full weeks never change the day of the week.",
+    interviewAnswer: "I divided 45 by 7 and found it leaves a remainder of 3, meaning only 3 days actually shift the weekday after all the full weeks cancel out. Counting 3 days forward from Wednesday lands on Saturday.",
   },
 ];
 

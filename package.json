@@ -10,7 +10,9 @@
     "ios:assets": "node scripts/generate-ios-assets.mjs",
     "ios:prepare": "npm run build && npm run ios:assets && npx cap copy ios",
     "ios:sync": "npm run build && npm run ios:assets && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "mac:build": "vite build --base=./ && node scripts/build-mac-app.mjs",
+    "mac:open": "npm run mac:build && open build/mac/Cracked.app"
   },
   "dependencies": {
     "@capacitor/cli": "^8.4.1",

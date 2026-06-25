@@ -2,8 +2,10 @@
   "appId": "com.wafi.placementprep",
   "appName": "Cracked",
   "webDir": "dist",
+  "backgroundColor": "#FAF8F4",
   "ios": {
     "contentInset": "never",
-    "allowsLinkPreview": false
+    "allowsLinkPreview": false,
+    "backgroundColor": "#FAF8F4"
   }
 }

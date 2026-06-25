@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -12,18 +12,38 @@ import {
   Flame,
   Home,
   Lightbulb,
+  Loader2,
   Mic,
   MicOff,
   RotateCcw,
+  Send,
   Settings,
+  Sparkles,
+  Target,
   Timer,
   X,
 } from "lucide-react";
 import { QUESTIONS, DSA_PROMPTS } from "./content";
+import {
+  generateApplicationInterviewQuestions,
+  gradeDsaAnswer,
+  explainDsaMistake,
+  followUpQuestion,
+  isAiConfigured,
+} from "./llm";
+import {
+  getLocalProgressUpdatedAt,
+  isProgressSyncConfigured,
+  loadRemoteProgress,
+  markLocalProgressUpdated,
+  progressSyncDescription,
+  saveRemoteProgress,
+} from "./sync";
 
 const STORAGE_KEY = "placement-prep-v2";
-const STATE_SCHEMA_VERSION = 3;
-const SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON"];
+const STATE_SCHEMA_VERSION = 4;
+const AI_TOOLS_ENABLED = isAiConfigured && import.meta.env.VITE_ENABLE_AI_TOOLS === "true";
+const SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON", "OA"];
 const SUBJECT_META = {
   DBMS: { name: "DBMS", detail: "Transactions, indexes, normalization", accent: "#c87a28" },
   OS: { name: "OS", detail: "CPU, memory, locks, deadlocks", accent: "#d65a4a" },
@@ -31,6 +51,7 @@ const SUBJECT_META = {
   OOP: { name: "OOP", detail: "SOLID, patterns, design tradeoffs", accent: "#6e78d8" },
   CPP: { name: "C++", detail: "Memory, references, STL, RAII", accent: "#4a5a8f" },
   PYTHON: { name: "Python", detail: "GIL, mutability, generators, scoping", accent: "#3d7a4f" },
+  OA: { name: "Logical Aptitude", detail: "Series, arrangements, syllogisms, coding, directions", accent: "#8a5a9e" },
   DSA: { name: "DSA", detail: "Algorithm logic and complexity", accent: "#1a1714" },
 };
 const COURSE_OPTIONS = [
@@ -71,12 +92,19 @@ const COURSE_OPTIONS = [
     type: "mcq",
   },
   {
+    id: "OA",
+    title: "Logical Aptitude",
+    subtitle: "Aptitude reasoning, puzzles, and placement logic",
+    type: "mcq",
+  },
+  {
     id: "DSA",
     title: "DSA Logic",
     subtitle: "Explain the approach, compare, self-rate",
     type: "dsa",
   },
 ];
+const DEFAULT_SELECTED_COURSES = COURSE_OPTIONS.map((course) => course.id);
 const CORRECT_POINTS = { correct: 1, wrong: 0, blank: 0 };
 const CONTENT_BANK_SIGNATURE = [
   QUESTIONS.length,
@@ -84,14 +112,6 @@ const CONTENT_BANK_SIGNATURE = [
   QUESTIONS.map((question) => question.id).join(","),
   DSA_PROMPTS.map((prompt) => prompt.id).join(","),
 ].join("|");
-const CALENDAR_LEVELS = [
-  0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 2, 0,
-  1, 0, 2, 1, 0, 1, 0, 2, 2, 1, 2, 0,
-  2, 1, 3, 2, 2, 1, 0, 2, 3, 2, 3, 1,
-  3, 2, 3, 2, 3, 2, 1, 3, 3, 2, 3, 3,
-  2, 3, 3, 3, 3, 2, 2, 1, 2, 3, 2, 3,
-];
-
 
 function dateKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -105,6 +125,13 @@ function readableDate(date = new Date()) {
   }).format(date);
 }
 
+function greeting(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function daysBetween(a, b) {
   const oneDay = 24 * 60 * 60 * 1000;
   const start = new Date(`${a}T00:00:00`);
@@ -116,12 +143,23 @@ function clampPercent(value) {
   return Math.max(5, Math.min(100, Math.round(value)));
 }
 
+function addCourseBeforeDsa(courses, courseId) {
+  if (courses.includes(courseId)) return courses;
+  const dsaIndex = courses.indexOf("DSA");
+  if (dsaIndex === -1) return [...courses, courseId];
+  return [...courses.slice(0, dsaIndex), courseId, ...courses.slice(dsaIndex)];
+}
+
 function questionConceptKey(question) {
   return `${question.subject}:${question.concept}`;
 }
 
 function dsaConceptKey(prompt) {
   return `DSA:${prompt.concept}`;
+}
+
+function subjectLabel(subject) {
+  return SUBJECT_META[subject]?.name || subject;
 }
 
 function uniqueMcqConceptsForSubject(subject) {
@@ -136,43 +174,79 @@ function uniqueMcqConceptsForSubject(subject) {
   }, []);
 }
 
+function buildInterviewQuestionScope(selectedCourses) {
+  const selectedSubjects = selectedCourses.filter((course) => SUBJECTS.includes(course));
+  const fallbackSubjects = SUBJECTS.filter((subject) => subject !== "OA");
+  return (selectedSubjects.length ? selectedSubjects : fallbackSubjects)
+    .map((subject) => ({
+      subject,
+      concepts: uniqueMcqConceptsForSubject(subject).map(({ label }) => ({ label })),
+    }))
+    .filter((item) => item.concepts.length);
+}
+
 function defaultConceptState() {
-  const subjectConceptCounts = {};
-  const mcqState = QUESTIONS.reduce((acc, question, index) => {
+  const mcqState = QUESTIONS.reduce((acc, question) => {
     const key = questionConceptKey(question);
     if (acc[key]) return acc;
-    const subjectIndex = subjectConceptCounts[question.subject] || 0;
-    subjectConceptCounts[question.subject] = subjectIndex + 1;
     acc[key] = {
       label: question.concept,
       subject: question.subject,
       type: "mcq",
       ease: 2.5,
-      interval: index % 3 === 0 ? 0 : index + 1,
-      dueAt: index % 3 === 0 ? dateKey() : dateKey(new Date(Date.now() + index * 86400000)),
+      interval: 0,
+      dueAt: dateKey(),
       reps: 0,
       lapses: 0,
-      mastery: clampPercent(question.subject === "DBMS" ? 62 + (subjectIndex % 3) * 5 : 44 + (subjectIndex % 7) * 5),
+      mastery: 0,
       lastSeen: null,
     };
     return acc;
   }, {});
-  return DSA_PROMPTS.reduce((acc, prompt, index) => {
+  return DSA_PROMPTS.reduce((acc, prompt) => {
     const key = dsaConceptKey(prompt);
     acc[key] = {
       label: prompt.concept,
       subject: "DSA",
       type: "dsa",
       ease: 2.5,
-      interval: index + 1,
-      dueAt: index === 0 ? dateKey() : dateKey(new Date(Date.now() + index * 86400000)),
+      interval: 0,
+      dueAt: dateKey(),
       reps: 0,
       lapses: 0,
-      mastery: clampPercent(42 + (index % 8) * 4),
+      mastery: 0,
       lastSeen: null,
     };
     return acc;
   }, mcqState);
+}
+
+function subjectQuestionCoverage(subject, attempts) {
+  const subjectQuestionIds = new Set(QUESTIONS.filter((question) => question.subject === subject).map((q) => q.id));
+  const attemptedIds = new Set(
+    attempts.filter((attempt) => subjectQuestionIds.has(attempt.questionId)).map((attempt) => attempt.questionId),
+  );
+  return { completed: attemptedIds.size, total: subjectQuestionIds.size };
+}
+
+function dsaCoverage(dsaAttempts) {
+  const attemptedIds = new Set(dsaAttempts.map((attempt) => attempt.promptId));
+  return { completed: attemptedIds.size, total: DSA_PROMPTS.length };
+}
+
+function buildActivityLevels(attempts, dsaAttempts, days = 60) {
+  const countsByDate = {};
+  [...attempts, ...dsaAttempts].forEach((attempt) => {
+    countsByDate[attempt.date] = (countsByDate[attempt.date] || 0) + 1;
+  });
+  const levels = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = dateKey(new Date(Date.now() - offset * 86400000));
+    const count = countsByDate[date] || 0;
+    const level = count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : 3;
+    levels.push(level);
+  }
+  return levels;
 }
 
 function createInitialState() {
@@ -180,7 +254,7 @@ function createInitialState() {
     settings: {
       dailyGoal: 7,
       activeSubjects: SUBJECTS,
-      selectedCourses: COURSE_OPTIONS.map((course) => course.id),
+      selectedCourses: DEFAULT_SELECTED_COURSES,
       remindersEnabled: true,
       reminderTime: "9:00 AM",
       interviewMode: true,
@@ -188,24 +262,49 @@ function createInitialState() {
     hasCompletedCourseSetup: false,
     conceptState: defaultConceptState(),
     streak: {
-      current: 3,
-      longest: 12,
-      lastActiveDate: dateKey(new Date(Date.now() - 86400000)),
-      history: [
-        { date: dateKey(new Date(Date.now() - 6 * 86400000)), completed: true },
-        { date: dateKey(new Date(Date.now() - 5 * 86400000)), completed: true },
-        { date: dateKey(new Date(Date.now() - 4 * 86400000)), completed: false },
-        { date: dateKey(new Date(Date.now() - 3 * 86400000)), completed: true },
-        { date: dateKey(new Date(Date.now() - 2 * 86400000)), completed: true },
-        { date: dateKey(new Date(Date.now() - 86400000)), completed: true },
-        { date: dateKey(), completed: false },
-      ],
+      current: 0,
+      longest: 0,
+      lastActiveDate: null,
+      history: [],
     },
     attempts: [],
     dsaAttempts: [],
     dailySet: null,
+    oaCourseAddedToSelection: true,
     contentBankSignature: CONTENT_BANK_SIGNATURE,
     stateSchemaVersion: STATE_SCHEMA_VERSION,
+  };
+}
+
+function normalizeSavedState(saved) {
+  if (!saved || saved.stateSchemaVersion !== STATE_SCHEMA_VERSION) {
+    return createInitialState();
+  }
+
+  const hasCurrentContent = saved.contentBankSignature === CONTENT_BANK_SIGNATURE;
+  const savedSelectedCourses =
+    saved.settings?.selectedCourses ||
+    [...new Set([...(saved.settings?.activeSubjects || SUBJECTS), "DSA"])];
+  const selectedCourses =
+    saved.oaCourseAddedToSelection === true
+      ? savedSelectedCourses
+      : addCourseBeforeDsa(savedSelectedCourses, "OA");
+
+  return {
+    ...createInitialState(),
+    ...saved,
+    contentBankSignature: CONTENT_BANK_SIGNATURE,
+    stateSchemaVersion: STATE_SCHEMA_VERSION,
+    oaCourseAddedToSelection: true,
+    settings: {
+      ...createInitialState().settings,
+      ...saved.settings,
+      selectedCourses,
+      activeSubjects: selectedCourses.filter((course) => SUBJECTS.includes(course)),
+    },
+    conceptState: { ...defaultConceptState(), ...saved.conceptState },
+    dsaAttempts: saved.dsaAttempts || [],
+    dailySet: hasCurrentContent ? saved.dailySet : null,
   };
 }
 
@@ -213,26 +312,10 @@ function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!saved) return createInitialState();
-    const hasCurrentContent = saved.contentBankSignature === CONTENT_BANK_SIGNATURE;
-    const hasCurrentSchema = saved.stateSchemaVersion === STATE_SCHEMA_VERSION;
-    return {
-      ...createInitialState(),
-      ...saved,
-      contentBankSignature: CONTENT_BANK_SIGNATURE,
-      stateSchemaVersion: STATE_SCHEMA_VERSION,
-      settings: {
-        ...createInitialState().settings,
-        ...saved.settings,
-        selectedCourses:
-          saved.settings?.selectedCourses ||
-          [...new Set([...(saved.settings?.activeSubjects || SUBJECTS), "DSA"])],
-      },
-      conceptState: hasCurrentSchema
-        ? { ...defaultConceptState(), ...saved.conceptState }
-        : defaultConceptState(),
-      dsaAttempts: saved.dsaAttempts || [],
-      dailySet: hasCurrentContent && hasCurrentSchema ? saved.dailySet : null,
-    };
+    if (saved.stateSchemaVersion !== STATE_SCHEMA_VERSION) {
+      return createInitialState();
+    }
+    return normalizeSavedState(saved);
   } catch {
     return createInitialState();
   }
@@ -240,9 +323,10 @@ function loadState() {
 
 function composeDailySet(settings, conceptState) {
   const today = dateKey();
-  const activeSubjects = settings.selectedCourses?.filter((course) => SUBJECTS.includes(course)) || settings.activeSubjects;
-  const active = QUESTIONS.filter((question) => activeSubjects.includes(question.subject));
-  const ranked = [...active].sort((a, b) => {
+  const activeSubjects = (settings.selectedCourses?.filter((course) => SUBJECTS.includes(course)) || settings.activeSubjects).filter(
+    (subject) => subject !== "OA",
+  );
+  const rankQuestions = (questions) => [...questions].sort((a, b) => {
     const aState = conceptState[questionConceptKey(a)] || {};
     const bState = conceptState[questionConceptKey(b)] || {};
     const aDue = (aState.dueAt || today) <= today ? 0 : 1;
@@ -250,10 +334,30 @@ function composeDailySet(settings, conceptState) {
     if (aDue !== bDue) return aDue - bDue;
     return (aState.mastery || 0) - (bState.mastery || 0);
   });
+  const queues = activeSubjects
+    .map((subject) => rankQuestions(QUESTIONS.filter((question) => question.subject === subject)))
+    .filter((queue) => queue.length);
+  const selected = [];
+  const usedIds = new Set();
+
+  while (selected.length < settings.dailyGoal && queues.some((queue) => queue.length)) {
+    for (const queue of queues) {
+      if (selected.length >= settings.dailyGoal) break;
+      const nextQuestion = queue.find((question) => !usedIds.has(question.id));
+      if (!nextQuestion) continue;
+      selected.push(nextQuestion);
+      usedIds.add(nextQuestion.id);
+    }
+    queues.forEach((queue) => {
+      while (queue.length && usedIds.has(queue[0].id)) {
+        queue.shift();
+      }
+    });
+  }
 
   return {
     date: today,
-    questionIds: ranked.slice(0, settings.dailyGoal).map((question) => question.id),
+    questionIds: selected.map((question) => question.id),
     completedAt: null,
     contentBankSignature: CONTENT_BANK_SIGNATURE,
   };
@@ -289,6 +393,29 @@ function nextDsaPrompt(settings, conceptState, attempts) {
       if (aDue !== bDue) return aDue - bDue;
       return (aState.mastery || 0) - (bState.mastery || 0);
     })[0] || DSA_PROMPTS[0];
+}
+
+function nextOaQuestion(settings, conceptState, attempts) {
+  const hasOa = settings.selectedCourses?.includes("OA");
+  if (!hasOa) return null;
+  const oaQuestions = QUESTIONS.filter((question) => question.subject === "OA");
+  if (!oaQuestions.length) return null;
+  const today = dateKey();
+  const attemptedToday = new Set(
+    attempts.filter((attempt) => attempt.date === today).map((attempt) => attempt.questionId),
+  );
+  return (
+    [...oaQuestions]
+      .filter((question) => !attemptedToday.has(question.id))
+      .sort((a, b) => {
+        const aState = conceptState[questionConceptKey(a)] || {};
+        const bState = conceptState[questionConceptKey(b)] || {};
+        const aDue = (aState.dueAt || today) <= today ? 0 : 1;
+        const bDue = (bState.dueAt || today) <= today ? 0 : 1;
+        if (aDue !== bDue) return aDue - bDue;
+        return (aState.mastery || 0) - (bState.mastery || 0);
+      })[0] || oaQuestions[0]
+  );
 }
 
 function updateMemoryState(previous, outcome) {
@@ -348,6 +475,8 @@ function classNames(...values) {
 
 export function App() {
   const [appState, setAppState] = useState(loadState);
+  const [syncStatus, setSyncStatus] = useState(() => (isProgressSyncConfigured() ? "checking" : "local"));
+  const [syncMessage, setSyncMessage] = useState(progressSyncDescription);
   const [view, setView] = useState("today");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(null);
@@ -355,9 +484,76 @@ export function App() {
   const [lessonQuestionId, setLessonQuestionId] = useState(null);
   const [lessonOrigin, setLessonOrigin] = useState("question");
   const [practiceSubject, setPracticeSubject] = useState(null);
+  const [practiceSet, setPracticeSet] = useState([]);
   const [practiceIndex, setPracticeIndex] = useState(0);
   const [practiceSelectedIndex, setPracticeSelectedIndex] = useState(null);
   const [practiceCardSide, setPracticeCardSide] = useState("front");
+  const [interviewQuestions, setInterviewQuestions] = useState([]);
+  const [interviewIndex, setInterviewIndex] = useState(0);
+  const [interviewSelectedIndex, setInterviewSelectedIndex] = useState(null);
+  const [interviewCardSide, setInterviewCardSide] = useState("front");
+  const [interviewAnswers, setInterviewAnswers] = useState({});
+  const [interviewStatus, setInterviewStatus] = useState("idle");
+  const [interviewError, setInterviewError] = useState("");
+  const syncReadyRef = useRef(!isProgressSyncConfigured());
+  const hasStoredInitialLocalStateRef = useRef(false);
+  const lastSyncedStateRef = useRef(null);
+  const syncInProgressRef = useRef(false);
+  const appStateRef = useRef(appState);
+  const saveTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    appStateRef.current = appState;
+  }, [appState]);
+
+  const pullRemoteProgress = useCallback(async (isInitial = false) => {
+    if (!isProgressSyncConfigured()) return;
+    if (syncInProgressRef.current) return;
+
+    syncInProgressRef.current = true;
+    if (isInitial) {
+      setSyncStatus("checking");
+      setSyncMessage("Checking cloud progress...");
+    }
+
+    try {
+      const remote = await loadRemoteProgress();
+      const localUpdatedAt = getLocalProgressUpdatedAt();
+
+      if (remote?.state) {
+        if (!localUpdatedAt || remote.updatedAt > localUpdatedAt) {
+          const normalized = normalizeSavedState(remote.state);
+          const serialized = JSON.stringify(normalized);
+          lastSyncedStateRef.current = serialized;
+
+          setAppState(normalized);
+          markLocalProgressUpdated(remote.updatedAt);
+          setSyncStatus("synced");
+          setSyncMessage("Pulled latest progress from cloud.");
+        } else if (isInitial) {
+          const serialized = JSON.stringify(appStateRef.current);
+          lastSyncedStateRef.current = serialized;
+          await saveRemoteProgress(appStateRef.current);
+          setSyncStatus("synced");
+          setSyncMessage("Cloud progress updated from this device.");
+        }
+      } else if (isInitial) {
+        const serialized = JSON.stringify(appStateRef.current);
+        lastSyncedStateRef.current = serialized;
+        await saveRemoteProgress(appStateRef.current);
+        setSyncStatus("synced");
+        setSyncMessage("Cloud progress created for this app.");
+      }
+    } catch (err) {
+      if (isInitial) {
+        setSyncStatus("offline");
+        setSyncMessage(err.message || "Progress sync is unavailable.");
+      }
+    } finally {
+      syncInProgressRef.current = false;
+      syncReadyRef.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     setAppState((state) => {
@@ -397,7 +593,109 @@ export function App() {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    if (hasStoredInitialLocalStateRef.current && syncReadyRef.current) {
+      markLocalProgressUpdated();
+    } else {
+      hasStoredInitialLocalStateRef.current = true;
+    }
   }, [appState]);
+
+  useEffect(() => {
+    pullRemoteProgress(true);
+  }, [pullRemoteProgress]);
+
+  useEffect(() => {
+    if (!isProgressSyncConfigured()) return undefined;
+
+    const handleFocus = () => {
+      pullRemoteProgress();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        pullRemoteProgress();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        pullRemoteProgress();
+      }
+    }, 15000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [pullRemoteProgress]);
+
+  useEffect(() => {
+    if (!isProgressSyncConfigured() || !syncReadyRef.current) return undefined;
+
+    const serialized = JSON.stringify(appState);
+    if (lastSyncedStateRef.current === serialized) {
+      return undefined;
+    }
+
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = window.setTimeout(async () => {
+      saveTimeoutRef.current = null;
+      setSyncStatus("syncing");
+      setSyncMessage("Saving progress...");
+      try {
+        await saveRemoteProgress(appState);
+        lastSyncedStateRef.current = JSON.stringify(appState);
+        setSyncStatus("synced");
+        setSyncMessage("Progress synced.");
+      } catch (err) {
+        setSyncStatus("offline");
+        setSyncMessage(err.message || "Progress sync is unavailable.");
+      }
+    }, 700);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [appState]);
+
+  // Flush pending save immediately when page/app goes to background
+  useEffect(() => {
+    if (!isProgressSyncConfigured()) return undefined;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (saveTimeoutRef.current) {
+          window.clearTimeout(saveTimeoutRef.current);
+          saveTimeoutRef.current = null;
+        }
+
+        const serialized = JSON.stringify(appStateRef.current);
+        if (lastSyncedStateRef.current !== serialized) {
+          saveRemoteProgress(appStateRef.current)
+            .then(() => {
+              lastSyncedStateRef.current = serialized;
+            })
+            .catch((err) => {
+              console.error("Background auto-sync failed:", err);
+            });
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   const todaySet = useMemo(() => {
     const ids = appState.dailySet?.questionIds || [];
@@ -407,11 +705,14 @@ export function App() {
   const todayAttempts = appState.attempts.filter(
     (attempt) => attempt.date === dateKey() && (attempt.source || "daily") === "daily",
   );
+  const todaySetIds = new Set(todaySet.map((question) => question.id));
+  const todaySetAttempts = todayAttempts.filter((attempt) => todaySetIds.has(attempt.questionId));
   const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
-  const completedCount = new Set(todayAttempts.map((attempt) => attempt.questionId)).size;
+  const completedCount = new Set(todaySetAttempts.map((attempt) => attempt.questionId)).size;
   const currentQuestion = todaySet[currentIndex] || todaySet[0] || QUESTIONS[0];
   const currentDsaPrompt = nextDsaPrompt(appState.settings, appState.conceptState, appState.dsaAttempts);
-  const currentAttempt = todayAttempts.find((attempt) => attempt.questionId === currentQuestion.id);
+  const currentOaQuestion = nextOaQuestion(appState.settings, appState.conceptState, appState.attempts);
+  const currentAttempt = todaySetAttempts.find((attempt) => attempt.questionId === currentQuestion.id);
   const responseOutcome =
     selectedIndex === null
       ? null
@@ -430,10 +731,6 @@ export function App() {
             100,
         );
 
-  const practiceSet = useMemo(
-    () => (practiceSubject ? composeSubjectPracticeSet(practiceSubject, appState.conceptState) : []),
-    [practiceSubject, appState.conceptState],
-  );
   const practiceAttemptsToday = appState.attempts.filter(
     (attempt) => attempt.date === dateKey() && attempt.source === "practice",
   );
@@ -449,10 +746,67 @@ export function App() {
         : practiceSelectedIndex === currentPracticeQuestion.correctIndex
           ? "correct"
           : "wrong";
+  const currentInterviewQuestion = interviewQuestions[interviewIndex] || interviewQuestions[0];
+  const interviewResponseOutcome =
+    !currentInterviewQuestion || interviewSelectedIndex === null
+      ? null
+      : interviewSelectedIndex === -1
+        ? "blank"
+        : interviewSelectedIndex === currentInterviewQuestion.correctIndex
+          ? "correct"
+          : "wrong";
+  const scrollResetKey = [
+    view,
+    cardSide,
+    practiceCardSide,
+    interviewCardSide,
+    view === "question" ? currentQuestion?.id : "",
+    view === "practice" ? currentPracticeQuestion?.id : "",
+    view === "interview-question" ? currentInterviewQuestion?.id : "",
+    view === "lesson" ? lessonQuestionId : "",
+    view === "dsa" ? currentDsaPrompt?.id : "",
+  ].join("|");
+
+  useEffect(() => {
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+
+      const shell = document.querySelector(".app-shell");
+      if (shell) {
+        shell.scrollTop = 0;
+      }
+      const frame = document.querySelector(".app-frame");
+      if (frame) {
+        frame.scrollTop = 0;
+      }
+      const explanationBodies = document.querySelectorAll(".explanation-body");
+      explanationBodies.forEach((el) => {
+        el.scrollTop = 0;
+      });
+    };
+
+    // Phase 1: Reset scroll immediately
+    resetScroll();
+
+    // Phase 2: Reset scroll on the next animation frame
+    const frameId = window.requestAnimationFrame(resetScroll);
+
+    // Phase 3: Reset scroll after a short delay to account for asynchronous React state/DOM updates
+    const timeoutId = window.setTimeout(resetScroll, 50);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [scrollResetKey]);
 
   function resetQuestionUi(nextIndex = currentIndex) {
+    const question = todaySet[nextIndex];
+    const attempt = question && todaySetAttempts.find((item) => item.questionId === question.id);
     setCurrentIndex(nextIndex);
-    setSelectedIndex(null);
+    setSelectedIndex(attempt ? (attempt.optionIndex === null ? -1 : attempt.optionIndex) : null);
     setCardSide("front");
   }
 
@@ -462,8 +816,12 @@ export function App() {
       return;
     }
     const firstUnanswered = todaySet.findIndex(
-      (question) => !todayAttempts.some((attempt) => attempt.questionId === question.id),
+      (question) => !todaySetAttempts.some((attempt) => attempt.questionId === question.id),
     );
+    if (firstUnanswered === -1) {
+      setView("summary");
+      return;
+    }
     resetQuestionUi(firstUnanswered >= 0 ? firstUnanswered : 0);
     setView("question");
   }
@@ -561,6 +919,11 @@ export function App() {
     resetQuestionUi(nextIndex);
   }
 
+  function previousQuestion() {
+    if (currentIndex <= 0) return;
+    resetQuestionUi(currentIndex - 1);
+  }
+
   function openLesson(questionId = currentQuestion.id, origin = "question") {
     setLessonQuestionId(questionId);
     setLessonOrigin(origin);
@@ -576,6 +939,7 @@ export function App() {
       (question) => !attemptsToday.some((attempt) => attempt.questionId === question.id),
     );
     setPracticeSubject(subject);
+    setPracticeSet(subjectSet);
     if (firstUnanswered === -1) {
       setView("practice-summary");
       return;
@@ -584,6 +948,87 @@ export function App() {
     setPracticeSelectedIndex(null);
     setPracticeCardSide("front");
     setView("practice");
+  }
+
+  function resetInterviewUi(nextIndex, set = interviewQuestions) {
+    const question = set[nextIndex];
+    const savedAnswer = question ? interviewAnswers[question.id] : undefined;
+    setInterviewIndex(nextIndex);
+    setInterviewSelectedIndex(savedAnswer === undefined ? null : savedAnswer);
+    setInterviewCardSide("front");
+  }
+
+  async function startInterviewGenerator() {
+    if (!AI_TOOLS_ENABLED || interviewStatus === "loading") return;
+
+    const scope = buildInterviewQuestionScope(appState.settings.selectedCourses);
+    if (!scope.length) {
+      setInterviewError("Select at least one MCQ course before generating interview questions.");
+      setInterviewStatus("error");
+      setView("interview-lab");
+      return;
+    }
+
+    setView("interview-lab");
+    setInterviewStatus("loading");
+    setInterviewError("");
+    setInterviewAnswers({});
+    setInterviewSelectedIndex(null);
+    setInterviewCardSide("front");
+
+    try {
+      const questions = await generateApplicationInterviewQuestions({ scope, count: 3 });
+      setInterviewQuestions(questions);
+      setInterviewIndex(0);
+      setInterviewStatus("ready");
+      setView("interview-question");
+    } catch (err) {
+      setInterviewQuestions([]);
+      setInterviewStatus("error");
+      setInterviewError(err.message || "Could not generate interview questions.");
+      setView("interview-lab");
+    }
+  }
+
+  function chooseInterviewOption(index) {
+    if (!currentInterviewQuestion || interviewSelectedIndex !== null) return;
+    setInterviewSelectedIndex(index);
+    setInterviewAnswers((answers) => ({
+      ...answers,
+      [currentInterviewQuestion.id]: index,
+    }));
+  }
+
+  function blankOutInterview() {
+    if (!currentInterviewQuestion || interviewSelectedIndex !== null) return;
+    setInterviewSelectedIndex(-1);
+    setInterviewCardSide("back");
+    setInterviewAnswers((answers) => ({
+      ...answers,
+      [currentInterviewQuestion.id]: -1,
+    }));
+  }
+
+  function nextInterviewQuestion() {
+    const nextIndex = interviewIndex + 1;
+    if (nextIndex >= interviewQuestions.length) {
+      setView("today");
+      return;
+    }
+    resetInterviewUi(nextIndex);
+  }
+
+  function previousInterviewQuestion() {
+    if (interviewIndex <= 0) return;
+    resetInterviewUi(interviewIndex - 1);
+  }
+
+  function resetPracticeUi(nextIndex, set = practiceSet) {
+    const question = set[nextIndex];
+    const attempt = question && practiceAttemptsToday.find((item) => item.questionId === question.id);
+    setPracticeIndex(nextIndex);
+    setPracticeSelectedIndex(attempt ? (attempt.optionIndex === null ? -1 : attempt.optionIndex) : null);
+    setPracticeCardSide("front");
   }
 
   function choosePracticeOption(index) {
@@ -610,9 +1055,12 @@ export function App() {
       setView("practice-summary");
       return;
     }
-    setPracticeIndex(nextIndex);
-    setPracticeSelectedIndex(null);
-    setPracticeCardSide("front");
+    resetPracticeUi(nextIndex);
+  }
+
+  function previousPracticeQuestion() {
+    if (practiceIndex <= 0) return;
+    resetPracticeUi(practiceIndex - 1);
   }
 
   function exitPractice() {
@@ -639,6 +1087,72 @@ export function App() {
 
   function openCourseSetup() {
     setView("setup");
+  }
+
+  function goBackFromLesson() {
+    setView(
+      lessonOrigin === "practice"
+        ? "practice"
+        : cardSide === "back"
+          ? "question"
+          : "today",
+    );
+  }
+
+  function continueFromLesson() {
+    if (lessonOrigin === "practice") {
+      setView("practice");
+      nextPracticeQuestion();
+    } else {
+      setView("question");
+      nextQuestion();
+    }
+  }
+
+  function rateLesson(question, rating) {
+    const conceptKey = questionConceptKey(question);
+    setAppState((state) => ({
+      ...state,
+      conceptState: {
+        ...state.conceptState,
+        [conceptKey]: updateMemoryState(
+          state.conceptState[conceptKey] || defaultConceptState()[conceptKey],
+          rating,
+        ),
+      },
+    }));
+    continueFromLesson();
+  }
+
+  function goTopBack() {
+    if (view === "today") return;
+    if (view === "question") {
+      const confirmExit = window.confirm("Exit active session? Your progress is saved, and you can resume anytime from the dashboard.");
+      if (!confirmExit) return;
+    }
+    if (view === "practice") {
+      const confirmExit = window.confirm("Exit practice session? This will discard your current custom practice run.");
+      if (!confirmExit) return;
+      exitPractice();
+      return;
+    }
+    if (view === "practice-summary") {
+      setView("practice-setup");
+      return;
+    }
+    if (view === "interview-question" || view === "interview-lab") {
+      setView("today");
+      return;
+    }
+    if (view === "lesson") {
+      goBackFromLesson();
+      return;
+    }
+    if (view === "setup") {
+      setView("settings");
+      return;
+    }
+    setView("today");
   }
 
   function recordDsaAttempt(prompt, rating, draft) {
@@ -669,6 +1183,12 @@ export function App() {
   }
 
   function regenerateSet() {
+    if (completedCount > 0) {
+      const confirmReset = window.confirm(
+        "Are you sure you want to rebuild today's set? This will reset your progress for today's session, though your overall history is saved."
+      );
+      if (!confirmReset) return;
+    }
     setAppState((state) => ({
       ...state,
       dailySet: composeDailySet(state.settings, state.conceptState),
@@ -739,15 +1259,21 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="app-frame" aria-label="Cracked application">
-        {appState.hasCompletedCourseSetup && view !== "setup" && (
+      <section
+        className={classNames("app-frame", appState.hasCompletedCourseSetup && "has-frame-top")}
+        aria-label="Cracked application"
+      >
+        {appState.hasCompletedCourseSetup && (
           <FrameTop
             view={view}
             setView={setView}
-            completedCount={completedCount + todayDsaAttempts.length}
-            totalCount={todaySet.length + (currentDsaPrompt ? 1 : 0)}
+            onBack={goTopBack}
+            backDisabled={view === "today"}
+            completedCount={completedCount}
+            totalCount={todaySet.length}
             streak={appState.streak}
             dsaEnabled={appState.settings.selectedCourses.includes("DSA")}
+            lessonOrigin={lessonOrigin}
           />
         )}
 
@@ -761,16 +1287,21 @@ export function App() {
         {appState.hasCompletedCourseSetup && view === "today" && (
           <TodayView
             todaySet={todaySet}
-            attempts={todayAttempts}
+            attempts={todaySetAttempts}
             dsaAttempts={todayDsaAttempts}
             dsaPrompt={currentDsaPrompt}
+            oaQuestion={currentOaQuestion}
             completedCount={completedCount}
             dsaEnabled={appState.settings.selectedCourses.includes("DSA")}
+            oaEnabled={appState.settings.selectedCourses.includes("OA")}
             settings={appState.settings}
             conceptState={appState.conceptState}
             streak={appState.streak}
             startSession={startSession}
             startDsa={() => setView("dsa")}
+            startOa={() => startPractice("OA")}
+            startInterviewGenerator={startInterviewGenerator}
+            interviewStatus={interviewStatus}
             openProgress={() => setView("progress")}
             openPractice={() => setView("practice-setup")}
           />
@@ -788,8 +1319,8 @@ export function App() {
             blankOut={blankOut}
             flip={() => setCardSide("back")}
             nextQuestion={nextQuestion}
+            previousQuestion={previousQuestion}
             openLesson={openLesson}
-            goToday={() => setView("today")}
           />
         )}
 
@@ -803,8 +1334,33 @@ export function App() {
           />
         )}
 
+        {appState.hasCompletedCourseSetup && view === "interview-lab" && (
+          <InterviewLabView
+            status={interviewStatus}
+            error={interviewError}
+            selectedCourses={appState.settings.selectedCourses}
+            startInterviewGenerator={startInterviewGenerator}
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "interview-question" && (
+          <QuestionView
+            question={currentInterviewQuestion}
+            total={interviewQuestions.length}
+            currentIndex={interviewIndex}
+            selectedIndex={interviewSelectedIndex}
+            cardSide={interviewCardSide}
+            responseOutcome={interviewResponseOutcome}
+            chooseOption={chooseInterviewOption}
+            blankOut={blankOutInterview}
+            flip={() => setInterviewCardSide("back")}
+            nextQuestion={nextInterviewQuestion}
+            previousQuestion={previousInterviewQuestion}
+          />
+        )}
+
         {appState.hasCompletedCourseSetup && view === "practice-setup" && (
-          <PracticeSetupView conceptState={appState.conceptState} startPractice={startPractice} />
+          <PracticeSetupView conceptState={appState.conceptState} attempts={appState.attempts} startPractice={startPractice} />
         )}
 
         {appState.hasCompletedCourseSetup && view === "practice" && (
@@ -819,9 +1375,8 @@ export function App() {
             blankOut={blankOutPractice}
             flip={() => setPracticeCardSide("back")}
             nextQuestion={nextPracticeQuestion}
+            previousQuestion={previousPracticeQuestion}
             openLesson={(questionId) => openLesson(questionId, "practice")}
-            goToday={exitPractice}
-            backLabel="Practice"
           />
         )}
 
@@ -838,26 +1393,19 @@ export function App() {
         {appState.hasCompletedCourseSetup && view === "lesson" && (
           <LessonView
             question={QUESTIONS.find((item) => item.id === lessonQuestionId) || currentQuestion}
-            onBack={() =>
-              setView(
-                lessonOrigin === "practice"
-                  ? "practice"
-                  : cardSide === "back"
-                    ? "question"
-                    : "today",
-              )
-            }
+            onRate={rateLesson}
           />
         )}
 
         {appState.hasCompletedCourseSetup && view === "summary" && (
           <SummaryView
             todaySet={todaySet}
-            attempts={todayAttempts}
+            attempts={todaySetAttempts}
             streak={appState.streak}
             accuracy={accuracy}
             goToday={() => setView("today")}
             openProgress={() => setView("progress")}
+            openPractice={() => setView("practice-setup")}
           />
         )}
 
@@ -875,12 +1423,15 @@ export function App() {
         {appState.hasCompletedCourseSetup && view === "settings" && (
           <SettingsView
             settings={appState.settings}
+            syncStatus={syncStatus}
+            syncMessage={syncMessage}
             updateGoal={updateGoal}
             toggleSubject={toggleSubject}
             toggleCourse={toggleCourse}
             updatePreference={updatePreference}
             regenerateSet={regenerateSet}
             openCourseSetup={openCourseSetup}
+            exportSnapshot={appState}
           />
         )}
       </section>
@@ -888,7 +1439,7 @@ export function App() {
   );
 }
 
-function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnabled }) {
+function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCount, streak, dsaEnabled, lessonOrigin }) {
   const baseNavItems = [
     { id: "today", label: "Today", icon: Home },
     ...(dsaEnabled ? [{ id: "dsa", label: "DSA", icon: Code2 }] : []),
@@ -896,14 +1447,15 @@ function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnable
     { id: "progress", label: "Progress", icon: BarChart3 },
     { id: "settings", label: "Settings", icon: Settings },
   ];
-  const mobileNavItems = baseNavItems.filter((item) => item.id !== "dsa");
+  const mobileNavItems = baseNavItems;
 
   function renderNavButtons(items) {
     return items.map((item) => {
       const Icon = item.icon;
       const isActive =
-        view === item.id ||
-        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary"));
+        (view === item.id) ||
+        (item.id === "today" && (view === "question" || view === "summary" || view === "interview-lab" || view === "interview-question" || (view === "lesson" && lessonOrigin === "question"))) ||
+        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || (view === "lesson" && lessonOrigin === "practice")));
       return (
         <button
           key={item.id}
@@ -920,12 +1472,24 @@ function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnable
   return (
     <>
       <header className="frame-top">
-        <button className="brand-button" onClick={() => setView("today")}>
-          <span className="brand-mark">
-            <FlameMark size={18} />
-          </span>
-          <span className="eyebrow">Cracked</span>
-        </button>
+        <div className="top-leading">
+          <button
+            className="top-back-button"
+            onClick={onBack}
+            disabled={backDisabled}
+            aria-label={backDisabled ? "Already on Today" : "Back"}
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+            <span>Back</span>
+          </button>
+          <span className="top-divider" aria-hidden="true" />
+          <button className="brand-button" onClick={() => setView("today")}>
+            <span className="brand-mark">
+              <FlameMark size={18} />
+            </span>
+            <span className="eyebrow">Cracked</span>
+          </button>
+        </div>
         <nav className="top-nav top-nav-desktop" aria-label="Main navigation">
           {renderNavButtons(baseNavItems)}
         </nav>
@@ -936,7 +1500,11 @@ function FrameTop({ view, setView, completedCount, totalCount, streak, dsaEnable
           <span>{streak.current}</span>
         </div>
       </header>
-      <nav className="top-nav mobile-tabbar" aria-label="Mobile navigation">
+      <nav
+        className="top-nav mobile-tabbar"
+        aria-label="Mobile navigation"
+        style={{ "--mobile-nav-count": mobileNavItems.length }}
+      >
         {renderNavButtons(mobileNavItems)}
       </nav>
     </>
@@ -961,12 +1529,6 @@ function CourseSetupView({ selectedCourses, onComplete }) {
   return (
     <div className="screen setup-screen">
       <section className="setup-hero color-wash">
-        <div className="step-dots" aria-label="Setup progress">
-          <span className="active" />
-          <span className="active" />
-          <span />
-          <span />
-        </div>
         <p className="eyebrow">Cracked setup</p>
         <h1>Set up your prep.</h1>
         <p>
@@ -1042,7 +1604,7 @@ function CourseSetupView({ selectedCourses, onComplete }) {
           <div className="readiness-card">
             <p className="eyebrow">Placement-ready in</p>
             <strong>~{readinessWeeks} weeks</strong>
-            <span>Based on {selectedMcqCount} CS-core courses and DSA practice.</span>
+            <span>Based on {selectedMcqCount} MCQ courses and DSA practice.</span>
           </div>
         </aside>
       </section>
@@ -1069,22 +1631,26 @@ function TodayView({
   attempts,
   dsaAttempts,
   dsaPrompt,
+  oaQuestion,
   completedCount,
   dsaEnabled,
+  oaEnabled,
   settings,
   conceptState,
   streak,
   startSession,
   startDsa,
+  startOa,
+  startInterviewGenerator,
+  interviewStatus,
   openProgress,
   openPractice,
 }) {
   const total = todaySet.length;
-  const totalAtoms = total + (dsaEnabled ? 1 : 0);
-  const completedAtoms = completedCount + dsaAttempts.length;
-  const percent = totalAtoms ? Math.round((completedAtoms / totalAtoms) * 100) : 0;
-  const selectedSubjects = settings.selectedCourses.filter((course) => SUBJECTS.includes(course));
-  const mix = SUBJECTS.map((subject) => {
+  const percent = total ? Math.round((completedCount / total) * 100) : 0;
+  const dailySetComplete = total > 0 && completedCount >= total;
+  const selectedSubjects = settings.selectedCourses.filter((course) => SUBJECTS.includes(course) && course !== "OA");
+  const mix = SUBJECTS.filter((subject) => subject !== "OA").map((subject) => {
     const questions = todaySet.filter((question) => question.subject === subject);
     const concepts = [...new Set(questions.map((question) => question.concept))];
     const states = uniqueMcqConceptsForSubject(subject)
@@ -1096,26 +1662,30 @@ function TodayView({
     return { subject, questions: questions.length, concepts, mastery };
   }).filter((item) => selectedSubjects.includes(item.subject));
 
+  const weakestEntry = Object.entries(conceptState)
+    .filter(([, state]) => state.reps > 0)
+    .sort((a, b) => a[1].mastery - b[1].mastery)[0];
+  const weakestSubjectKey = weakestEntry ? weakestEntry[0].split(":")[0] : "—";
+  const weakestSubject = weakestEntry ? (SUBJECT_META[weakestSubjectKey]?.name || weakestSubjectKey) : "—";
+  const weakestConcept = weakestEntry ? weakestEntry[0].split(":")[1] : "Not enough data yet";
+
   return (
     <div className="screen today-screen view-enter">
       <section className="hero-row">
         <div>
           <p className="eyebrow">Cracked</p>
-          <h1>Good morning.</h1>
+          <h1>{greeting()}.</h1>
         </div>
         <p className="date-label">{readableDate()}</p>
       </section>
 
       <section className="session-card dashboard-hero-card">
-        <ProgressRing percent={percent} label={`${completedAtoms} / ${totalAtoms}`} />
+        <ProgressRing percent={percent} label={`${completedCount} / ${total}`} />
         <div className="session-copy">
           <p className="eyebrow">Today's Session</p>
-          <h2>{totalAtoms} practice atoms ready</h2>
-          <p>
-            Est. {Math.max(8, totalAtoms * 2)} min - {settings.selectedCourses.join(" - ")} - mixed difficulty
-          </p>
+          <h2>{total} daily questions ready</h2>
           <div className="subject-chip-row" aria-label="Selected courses">
-            {settings.selectedCourses.map((course) => (
+            {selectedSubjects.map((course) => (
               <span key={course} style={{ "--chip-accent": SUBJECT_META[course]?.accent }}>
                 {course}
               </span>
@@ -1123,7 +1693,7 @@ function TodayView({
           </div>
         </div>
         <button className="primary-button" onClick={startSession}>
-          {completedCount > 0 ? "Continue Session" : "Start Session"}
+          {dailySetComplete ? "View daily summary" : completedCount > 0 ? "Continue daily set" : "Start daily set"}
           <ChevronRight size={16} aria-hidden="true" />
         </button>
       </section>
@@ -1143,6 +1713,55 @@ function TodayView({
           <button className="dark-button" onClick={startDsa}>
             Practice DSA
             <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </section>
+      )}
+
+      {oaEnabled && oaQuestion && (
+        <section className="dsa-teaser">
+          <div className="dsa-teaser-copy">
+            <span className="course-icon">
+              <Lightbulb size={18} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="eyebrow">Aptitude reasoning</p>
+              <h2>{oaQuestion.concept}</h2>
+              <p>{oaQuestion.stem}</p>
+            </div>
+          </div>
+          <button className="dark-button" onClick={startOa}>
+            Practice aptitude
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </section>
+      )}
+
+      {AI_TOOLS_ENABLED && (
+        <section className="dsa-teaser interview-teaser">
+          <div className="dsa-teaser-copy">
+            <span className="course-icon">
+              <Sparkles size={18} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="eyebrow">Application interview lab</p>
+              <h2>Generate situational questions</h2>
+              <p>
+                Gemini 2.5 Pro will create application-level interview MCQs from your selected subjects and concepts.
+              </p>
+            </div>
+          </div>
+          <button className="dark-button" onClick={startInterviewGenerator} disabled={interviewStatus === "loading"}>
+            {interviewStatus === "loading" ? (
+              <>
+                <Loader2 size={16} aria-hidden="true" className="spin-icon" />
+                Generating
+              </>
+            ) : (
+              <>
+                Generate
+                <ChevronRight size={16} aria-hidden="true" />
+              </>
+            )}
           </button>
         </section>
       )}
@@ -1168,21 +1787,25 @@ function TodayView({
       </section>
 
       <section className="today-planner" aria-label="Daily plan">
-        <article className="planner-card dark">
+        <article
+          className="planner-card dark"
+          onClick={weakestEntry ? () => startPractice(weakestSubjectKey) : undefined}
+          style={{ cursor: weakestEntry ? "pointer" : "default" }}
+        >
           <div>
-            <p className="eyebrow">Focus window</p>
-            <strong>{settings.interviewMode ? "Timed practice" : "Open practice"}</strong>
-            <span>{settings.interviewMode ? "30 second pressure per question" : "Hints and lesson links enabled"}</span>
+            <p className="eyebrow">Practice Weakest Area</p>
+            <strong>{weakestSubject}</strong>
+            <span style={{ textTransform: "capitalize" }}>{weakestConcept}</span>
           </div>
-          <Timer size={22} aria-hidden="true" />
+          <BookOpen size={22} aria-hidden="true" />
         </article>
         <article className="planner-card amber">
           <div>
-            <p className="eyebrow">Reminder</p>
-            <strong>{settings.remindersEnabled ? settings.reminderTime : "Off"}</strong>
-            <span>{settings.dailyGoal} questions planned</span>
+            <p className="eyebrow">Daily Target</p>
+            <strong>{completedCount} / {total} completed</strong>
+            <span>{completedCount >= total ? "Daily set complete." : `${total - completedCount} more to finish today's set`}</span>
           </div>
-          <Bell size={22} aria-hidden="true" />
+          <Target size={22} aria-hidden="true" />
         </article>
       </section>
 
@@ -1220,7 +1843,61 @@ function TodayView({
           <MetricCard label="DSA rated" value={`${dsaAttempts.length}`} detail="Self-graded" />
         ) : null}
         <MetricCard label="Due reviews" value={`${todaySet.filter((q) => conceptState[questionConceptKey(q)]?.dueAt <= dateKey()).length}`} detail="SM-2 pull" />
-        <MetricCard label="Weakest" value={dsaEnabled ? "DSA" : "CN"} detail={dsaEnabled ? "Sliding Window" : "Caching and TLS"} />
+        <MetricCard label="Weakest" value={weakestSubject} detail={weakestConcept} />
+      </section>
+    </div>
+  );
+}
+
+function InterviewLabView({ status, error, selectedCourses, startInterviewGenerator }) {
+  const selectedMcqCourses = selectedCourses.filter((course) => SUBJECTS.includes(course));
+  const courseLabel = selectedMcqCourses.length ? selectedMcqCourses.map(subjectLabel).join(" - ") : "Selected courses";
+
+  return (
+    <div className="screen interview-lab-screen view-enter">
+      <section className="dsa-card interview-lab-card">
+        <div className="dsa-prompt">
+          <p className="eyebrow">Application interview lab</p>
+          <h1>{status === "loading" ? "Thinking through scenarios..." : "Generate situational MCQs"}</h1>
+          <p>
+            Questions are constrained to {courseLabel} and must test practical reasoning over definitions.
+          </p>
+          <div className="hint-row">
+            <span>
+              <Sparkles size={14} aria-hidden="true" />
+              Gemini 2.5 Pro
+            </span>
+            <span>
+              <Target size={14} aria-hidden="true" />
+              Application-only
+            </span>
+            <span>
+              <BookOpen size={14} aria-hidden="true" />
+              Same syllabus
+            </span>
+          </div>
+        </div>
+
+        {status === "loading" ? (
+          <div className="model-answer reveal-panel interview-loading-panel">
+            <Loader2 size={22} aria-hidden="true" className="spin-icon" />
+            <p>Building scenario-based interview questions from your selected concepts.</p>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="callout warning">
+            <p className="eyebrow">Generation failed</p>
+            <p>{error}</p>
+          </div>
+        ) : null}
+
+        <div className="dsa-actions">
+          <button className="primary-button" onClick={startInterviewGenerator} disabled={status === "loading"}>
+            {status === "loading" ? "Generating..." : "Generate questions"}
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -1237,28 +1914,55 @@ function QuestionView({
   blankOut,
   flip,
   nextQuestion,
+  previousQuestion,
   openLesson,
-  goToday,
-  backLabel = "Today",
 }) {
+  if (!question) {
+    return (
+      <div className="screen summary-screen view-enter">
+        <article className="summary-paper">
+          <p className="eyebrow">Questions</p>
+          <h1>No questions ready.</h1>
+          <p className="summary-lede">Go back to Today and generate a fresh set.</p>
+        </article>
+      </div>
+    );
+  }
+
   const answered = selectedIndex !== null;
   const isCorrect = responseOutcome === "correct";
   const chosenOption = selectedIndex >= 0 ? question.options[selectedIndex] : null;
-  const [confidence, setConfidence] = useState("medium");
 
+  const [prevIndex, setPrevIndex] = useState(currentIndex);
+  const [slideDirection, setSlideDirection] = useState("");
+  if (currentIndex !== prevIndex) {
+    setSlideDirection(currentIndex > prevIndex ? "slide-next" : "slide-prev");
+    setPrevIndex(currentIndex);
+  }
+
+  const answerBarRef = useRef(null);
   useEffect(() => {
-    setConfidence("medium");
-  }, [question.id]);
+    if (answered && answerBarRef.current) {
+      setTimeout(() => {
+        answerBarRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 250);
+    }
+  }, [answered]);
 
   return (
     <div className="question-screen view-enter">
       <div className="question-top">
-        <button className="ghost-button compact" onClick={goToday}>
-          <ChevronLeft size={16} aria-hidden="true" />
-          {backLabel}
-        </button>
         <div className="question-context">
-          <span className="pill neutral">{question.subject}</span>
+          {currentIndex > 0 && (
+            <button
+              className="icon-button question-back"
+              onClick={previousQuestion}
+              aria-label="Previous question"
+            >
+              <ChevronLeft size={18} aria-hidden="true" />
+            </button>
+          )}
+          <span className="pill neutral">{subjectLabel(question.subject)}</span>
           <span>{question.concept}</span>
         </div>
         <span className="question-count">{currentIndex + 1} of {total}</span>
@@ -1270,7 +1974,7 @@ function QuestionView({
         ))}
       </div>
 
-      <section className="card-stage">
+      <section className={classNames("card-stage", slideDirection)} key={`${currentIndex}-${slideDirection}`}>
         <div className={classNames("flip-card", cardSide === "back" && "flipped")}>
           <article className="question-card card-face front-face">
             <div className="pill-row">
@@ -1278,19 +1982,6 @@ function QuestionView({
               <span className="pill accent">{question.difficulty}</span>
             </div>
             <p className="question-stem">{question.stem}</p>
-            <div className="confidence-row" aria-label="Confidence rating">
-              <span>Confidence</span>
-              {["low", "medium", "high"].map((level) => (
-                <button
-                  key={level}
-                  className={classNames(confidence === level && "selected")}
-                  onClick={() => setConfidence(level)}
-                  disabled={answered}
-                >
-                  {level}
-                </button>
-              ))}
-            </div>
             <div className="options-list">
               {question.options.map((option, index) => {
                 const optionState =
@@ -1318,7 +2009,7 @@ function QuestionView({
               })}
             </div>
             {answered ? (
-              <div className="answer-bar">
+              <div className="answer-bar" ref={answerBarRef}>
                 <Verdict outcome={responseOutcome} />
                 <button className="dark-button" onClick={flip}>
                   See explanation
@@ -1346,51 +2037,53 @@ function QuestionView({
             </div>
 
             <div className="explanation-body">
-              <div className="concept-chain">
-                <span>{question.subject}</span>
-                <ChevronRight size={14} aria-hidden="true" />
-                <span>{question.concept}</span>
-                <ChevronRight size={14} aria-hidden="true" />
-                <span>{question.options[question.correctIndex].text}</span>
-              </div>
               {isCorrect ? (
-                <>
-                  <p>{question.proTip}</p>
-                  <div className="callout success">
-                    <p className="eyebrow">Connects to</p>
-                    <p>{connectionText(question.subject)}</p>
-                  </div>
-                </>
+                <p>{question.proTip}</p>
               ) : selectedIndex === -1 ? (
-                <>
-                  <p>{question.lesson}</p>
-                  <div className="callout lesson">
-                    <p className="eyebrow">Remember</p>
-                    <p>{question.options[question.correctIndex].sub}</p>
-                  </div>
-                </>
+                <p>{question.lesson}</p>
               ) : (
                 <>
                   <p>{chosenOption?.fix}</p>
-                  <div className="callout warning">
-                    <p className="eyebrow">Key distinction</p>
-                    <p>
-                      The correct answer is <strong>{question.options[question.correctIndex].text}</strong>:{" "}
-                      {question.options[question.correctIndex].sub.toLowerCase()}.
-                    </p>
-                  </div>
-                  <p className="fix-note">
-                    Fix: anchor on what changed in the scenario before matching it to a named concept.
-                  </p>
+                  {question.proTip && (
+                    <div className="callout success">
+                      <p className="eyebrow">Why the correct answer is right</p>
+                      <p>{question.proTip}</p>
+                    </div>
+                  )}
                 </>
+              )}
+              {question.remember && (
+                <div className="callout lesson">
+                  <p className="eyebrow">Remember</p>
+                  <p>{question.remember}</p>
+                </div>
+              )}
+              {AI_TOOLS_ENABLED && (
+                <AiPanel
+                  key={`followup-${question.id}-${selectedIndex}`}
+                  actionLabel="Ask a follow-up question"
+                  resultLabel="Answer"
+                  startWithInput
+                  allowFollowUp
+                  run={(followUp) =>
+                    followUpQuestion({
+                      concept: question.concept,
+                      subject: question.subject,
+                      context: `${question.stem}\n\nCorrect answer: ${question.options[question.correctIndex].text} - ${question.options[question.correctIndex].sub}`,
+                      question: followUp,
+                    })
+                  }
+                />
               )}
             </div>
 
             <div className="card-actions">
-              <button className="text-button" onClick={() => openLesson(question.id)}>
-                <BookOpen size={15} aria-hidden="true" />
-                See full lesson
-              </button>
+              {openLesson ? (
+                <button className="ghost-button small-action" onClick={() => openLesson(question.id)}>
+                  <BookOpen size={15} aria-hidden="true" />
+                  See full lesson
+                </button>
+              ) : null}
               <button className="primary-button small" onClick={nextQuestion}>
                 {currentIndex + 1 >= total ? "Finish set" : "Next question"}
                 <ChevronRight size={16} aria-hidden="true" />
@@ -1408,6 +2101,7 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
   const [revealed, setRevealed] = useState(false);
   const [rated, setRated] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [isRequestingMic, setIsRequestingMic] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef(null);
@@ -1415,24 +2109,68 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
   const speechRecognition =
     typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
   const canTranscribe = Boolean(speechRecognition);
+  const canRequestMic =
+    typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+  const canUseVoice = canTranscribe || canRequestMic;
+  const voiceReadyStatus = canTranscribe
+    ? "Tap Speak to allow microphone access."
+    : canRequestMic
+      ? "Tap Speak to request microphone access."
+      : "Voice unavailable in this browser.";
   const voiceStatus =
     voiceError ||
     interimTranscript ||
-    (isListening ? "Listening..." : canTranscribe ? "Ready for dictation." : "Voice unavailable in this browser.");
+    (isRequestingMic ? "Requesting microphone access..." : null) ||
+    (isListening ? "Listening..." : voiceReadyStatus);
+
+  function stopVoiceDraft({ abort = false } = {}) {
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      try {
+        if (abort && typeof recognition.abort === "function") {
+          recognition.abort();
+        } else {
+          recognition.stop();
+        }
+      } catch {
+        // The browser/WebView may have already stopped the recognition session.
+      }
+    }
+    recognitionRef.current = null;
+    setIsListening(false);
+    setIsRequestingMic(false);
+    setInterimTranscript("");
+  }
 
   useEffect(() => {
     setDraft("");
     setRevealed(false);
     setRated(null);
     setVoiceError("");
-    setInterimTranscript("");
-    setIsListening(false);
-    recognitionRef.current?.stop();
+    stopVoiceDraft({ abort: true });
   }, [prompt?.id]);
 
   useEffect(() => {
+    function stopOnPageExit() {
+      stopVoiceDraft({ abort: true });
+    }
+
+    function stopOnHidden() {
+      if (document.visibilityState === "hidden") {
+        stopVoiceDraft({ abort: true });
+      }
+    }
+
+    document.addEventListener("visibilitychange", stopOnHidden);
+    window.addEventListener("pagehide", stopOnPageExit);
+    window.addEventListener("beforeunload", stopOnPageExit);
+    window.addEventListener("freeze", stopOnPageExit);
     return () => {
-      recognitionRef.current?.stop();
+      document.removeEventListener("visibilitychange", stopOnHidden);
+      window.removeEventListener("pagehide", stopOnPageExit);
+      window.removeEventListener("beforeunload", stopOnPageExit);
+      window.removeEventListener("freeze", stopOnPageExit);
+      stopVoiceDraft({ abort: true });
     };
   }, []);
 
@@ -1466,16 +2204,46 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
     });
   }
 
-  function toggleVoiceDraft() {
-    if (!canTranscribe) {
+  async function requestMicrophoneAccess() {
+    if (!canRequestMic) return true;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  }
+
+  async function toggleVoiceDraft() {
+    if (!canUseVoice) {
       setVoiceError("Voice dictation is not available in this browser.");
       return;
     }
 
     if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      setInterimTranscript("");
+      stopVoiceDraft();
+      return;
+    }
+
+    setIsRequestingMic(true);
+    setVoiceError("");
+    setInterimTranscript("");
+    try {
+      await requestMicrophoneAccess();
+    } catch (error) {
+      const permissionDenied = error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
+      const noInput = error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError";
+      setVoiceError(
+        permissionDenied
+          ? "Microphone access was denied. Allow it in device or browser settings, then try again."
+          : noInput
+            ? "No microphone was found on this device."
+            : "Microphone access could not be requested on this device.",
+      );
+      setIsRequestingMic(false);
+      return;
+    }
+    setIsRequestingMic(false);
+
+    if (!canTranscribe) {
+      setVoiceError("Microphone access is allowed, but speech dictation is not available in this browser.");
       return;
     }
 
@@ -1487,6 +2255,7 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
 
     recognition.onstart = () => {
       setIsListening(true);
+      setIsRequestingMic(false);
       setVoiceError("");
       setInterimTranscript("");
     };
@@ -1514,16 +2283,26 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
       setVoiceError(message);
       setIsListening(false);
       setInterimTranscript("");
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
     };
 
     recognition.onend = () => {
       setIsListening(false);
       setInterimTranscript("");
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
     };
 
     try {
       recognition.start();
     } catch {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+      setIsRequestingMic(false);
       setVoiceError("Voice dictation is already starting. Try again in a moment.");
     }
   }
@@ -1531,10 +2310,6 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
   return (
     <div className="screen dsa-screen view-enter">
       <div className="question-top inline">
-        <button className="ghost-button compact" onClick={goToday}>
-          <ChevronLeft size={16} aria-hidden="true" />
-          Today
-        </button>
         <div className="question-context">
           <span className="pill neutral">DSA</span>
           <span>{prompt.concept}</span>
@@ -1562,16 +2337,22 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
             <span>Your approach</span>
             <button
               type="button"
-              className={classNames("voice-button", isListening && "listening")}
+              className={classNames("voice-button", isListening && "listening", isRequestingMic && "requesting")}
               onClick={toggleVoiceDraft}
-              disabled={!canTranscribe}
+              disabled={!canUseVoice || isRequestingMic}
               aria-pressed={isListening}
               aria-label={
-                !canTranscribe ? "Voice dictation unavailable" : isListening ? "Stop voice dictation" : "Start voice dictation"
+                !canUseVoice
+                  ? "Voice dictation unavailable"
+                  : isRequestingMic
+                    ? "Requesting microphone access"
+                    : isListening
+                      ? "Stop voice dictation"
+                      : "Start voice dictation"
               }
             >
               {isListening ? <MicOff size={16} aria-hidden="true" /> : <Mic size={16} aria-hidden="true" />}
-              <span>{!canTranscribe ? "Unavailable" : isListening ? "Stop" : "Speak"}</span>
+              <span>{!canUseVoice ? "Unavailable" : isRequestingMic ? "Allow..." : isListening ? "Stop" : "Speak"}</span>
             </button>
           </span>
           <textarea
@@ -1579,10 +2360,19 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Write the algorithm, key invariant, edge cases, and complexity..."
           />
-          <span className={classNames("voice-status", isListening && "active", (voiceError || !canTranscribe) && "error")}>
+          <span className={classNames("voice-status", (isListening || isRequestingMic) && "active", (voiceError || !canUseVoice) && "error")}>
             {voiceStatus}
           </span>
         </label>
+
+        {AI_TOOLS_ENABLED && draft.trim() && (
+          <AiPanel
+            key={`grade-${prompt.id}`}
+            actionLabel="Get AI feedback on my answer"
+            resultLabel="AI feedback"
+            run={() => gradeDsaAnswer({ prompt, draft })}
+          />
+        )}
 
         <div className="dsa-actions">
           <button className="ghost-button" onClick={() => setRevealed(true)}>
@@ -1621,6 +2411,14 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
                 </button>
               ))}
             </div>
+            {AI_TOOLS_ENABLED && ["again", "hard"].includes(rated || alreadyRated?.outcome) && (
+              <AiPanel
+                key={`mistake-${prompt.id}`}
+                actionLabel="Explain what I got wrong"
+                resultLabel="Where it went wrong"
+                run={() => explainDsaMistake({ prompt, draft: draft || alreadyRated?.draft })}
+              />
+            )}
           </div>
         )}
       </section>
@@ -1628,40 +2426,32 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
   );
 }
 
-function LessonView({ question, onBack }) {
+function LessonView({ question, onRate }) {
   return (
     <div className="screen lesson-screen">
-      <button className="ghost-button compact" onClick={onBack}>
-        <ChevronLeft size={16} aria-hidden="true" />
-        Back
-      </button>
       <article className="lesson-paper lesson-document">
-        <aside className="lesson-toc">
-          <p className="eyebrow">Lesson map</p>
-          <span className="active">Core idea</span>
-          <span>Signal words</span>
-          <span>Interview link</span>
-          <span>Practice</span>
-        </aside>
         <div className="lesson-main">
-          <p className="eyebrow">{question.subject} - {question.concept}</p>
-          <h1>{question.options[question.correctIndex].text}</h1>
+          <p className="eyebrow">{question.subject}</p>
+          <h1>{question.concept}</h1>
           <p>{question.lesson}</p>
-          <div className="lesson-code-card">
-            <p className="eyebrow">Mental model</p>
-            <code>
-              scenario - signal - concept - tradeoff - answer
-            </code>
+          <div className="callout lesson">
+            <p className="eyebrow">Real example</p>
+            <p>{question.stem}</p>
           </div>
-          <div className="lesson-grid">
-            <div>
-              <p className="eyebrow">Question signal</p>
-              <p>{question.stem}</p>
+          {question.interviewAnswer && (
+            <div className="callout neutral">
+              <p className="eyebrow">Interview answer</p>
+              <p>{question.interviewAnswer}</p>
             </div>
-            <div>
-              <p className="eyebrow">Pro tip</p>
-              <p>{question.proTip}</p>
-            </div>
+          )}
+          <div className="card-actions lesson-actions">
+            <button className="ghost-button small-action" onClick={() => onRate(question, "again")}>
+              Review this again
+            </button>
+            <button className="primary-button small" onClick={() => onRate(question, "good")}>
+              I got it
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
           </div>
         </div>
       </article>
@@ -1669,10 +2459,30 @@ function LessonView({ question, onBack }) {
   );
 }
 
-function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgress }) {
+function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgress, openPractice }) {
   const correct = attempts.filter((attempt) => attempt.outcome === "correct").length;
   const concepts = [...new Set(todaySet.map((question) => question.concept))];
   const wrong = attempts.filter((attempt) => attempt.outcome === "wrong").length;
+
+  const conceptDeltas = {};
+  attempts.forEach((attempt) => {
+    const shift = {
+      correct: 8,
+      easy: 10,
+      good: 7,
+      hard: 2,
+      wrong: -9,
+      again: -10,
+      blank: -14,
+    }[attempt.outcome] ?? 0;
+    conceptDeltas[attempt.concept] = (conceptDeltas[attempt.concept] || 0) + shift;
+  });
+
+  const sortedDeltas = Object.entries(conceptDeltas).sort((a, b) => b[1] - a[1]);
+  const strongestConcept = sortedDeltas[0];
+  const strongestName = strongestConcept ? strongestConcept[0] : (concepts[0] || "Daily review");
+  const strongestDeltaVal = strongestConcept ? strongestConcept[1] : 8;
+  const strongestDeltaStr = strongestDeltaVal >= 0 ? `+${strongestDeltaVal}%` : `${strongestDeltaVal}%`;
 
   return (
     <div className="screen summary-screen">
@@ -1681,10 +2491,10 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
           <Flame size={24} aria-hidden="true" />
           <span>{streak.current} day streak</span>
         </div>
-        <p className="eyebrow">Set complete</p>
-        <h1>Nice work today.</h1>
+        <p className="eyebrow">Daily set complete</p>
+        <h1>{todaySet.length} questions done.</h1>
         <p className="summary-lede">
-          {correct} of {todaySet.length} correct. Today's concepts are back in the review scheduler.
+          {correct} of {todaySet.length} correct. You can stop here or keep practicing outside the daily count.
         </p>
         <div className="summary-grid">
           <MetricCard label="Accuracy" value={`${accuracy}%`} detail="All attempts" />
@@ -1694,7 +2504,7 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
         <div className="mastery-delta">
           <div className="delta-row positive">
             <span>Strongest today</span>
-            <strong>{concepts[0] || "Daily review"} +8%</strong>
+            <strong>{strongestName} {strongestDeltaStr}</strong>
           </div>
           <div className="delta-row warning">
             <span>Review again</span>
@@ -1703,7 +2513,11 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
         </div>
         <div className="summary-actions">
           <button className="ghost-button" onClick={goToday}>Back to today</button>
-          <button className="primary-button" onClick={openProgress}>
+          <button className="primary-button" onClick={openPractice}>
+            Practice more questions
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+          <button className="ghost-button" onClick={openProgress}>
             Open progress
             <ChevronRight size={16} aria-hidden="true" />
           </button>
@@ -1713,14 +2527,15 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
   );
 }
 
-function PracticeSetupView({ conceptState, startPractice }) {
+function PracticeSetupView({ conceptState, attempts, startPractice }) {
   const subjectCards = SUBJECTS.map((subject) => {
     const meta = SUBJECT_META[subject];
     const concepts = uniqueMcqConceptsForSubject(subject);
     const mastery = concepts.length
       ? Math.round(concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length)
       : 0;
-    return { subject, meta, mastery, questionCount: QUESTIONS.filter((q) => q.subject === subject).length };
+    const coverage = subjectQuestionCoverage(subject, attempts);
+    return { subject, meta, mastery, coverage };
   });
 
   return (
@@ -1731,7 +2546,7 @@ function PracticeSetupView({ conceptState, startPractice }) {
         <p className="screen-subtitle">Run through every question in one subject, outside the daily set.</p>
       </header>
       <div className="practice-subject-grid">
-        {subjectCards.map(({ subject, meta, mastery, questionCount }) => (
+        {subjectCards.map(({ subject, meta, mastery, coverage }) => (
           <button key={subject} className="practice-subject-card" onClick={() => startPractice(subject)}>
             <div className="practice-subject-card-top">
               <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
@@ -1740,7 +2555,17 @@ function PracticeSetupView({ conceptState, startPractice }) {
               <span className="practice-subject-mastery">{mastery}%</span>
             </div>
             <p className="practice-subject-detail">{meta.detail}</p>
-            <span className="practice-subject-count">{questionCount} questions</span>
+            <div className="coverage-row">
+              <div className="coverage-bar">
+                <span
+                  className="coverage-bar-fill"
+                  style={{ width: `${coverage.total ? (coverage.completed / coverage.total) * 100 : 0}%` }}
+                />
+              </div>
+              <span className="coverage-label">
+                {coverage.completed}/{coverage.total} questions covered
+              </span>
+            </div>
           </button>
         ))}
       </div>
@@ -1779,8 +2604,10 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
     const mastery = Math.round(
       concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length,
     );
-    return { subject, concepts, mastery };
+    const coverage = subjectQuestionCoverage(subject, attempts);
+    return { subject, concepts, mastery, coverage };
   });
+  const activityLevels = buildActivityLevels(attempts, dsaAttempts);
   const visibleMcqConcepts = activeSubjects.flatMap((subject) =>
     uniqueMcqConceptsForSubject(subject).map(({ key, label }) => [key, conceptState[key], label]),
   );
@@ -1823,8 +2650,8 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
             <span>Consistency beats cramming.</span>
           </div>
           <div className="activity-grid" aria-label="Practice activity">
-            {CALENDAR_LEVELS.map((level, index) => (
-              <span key={`${level}-${index}`} className={`level-${level}`} />
+            {activityLevels.map((level, index) => (
+              <span key={index} className={`level-${level}`} />
             ))}
           </div>
         </div>
@@ -1832,8 +2659,19 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
           {subjectRows.map((row) => (
             <div className="subject-block" key={row.subject}>
               <div className="subject-head">
-                <strong>{row.subject}</strong>
+                <strong>{subjectLabel(row.subject)}</strong>
                 <span>{row.mastery}%</span>
+              </div>
+              <div className="coverage-row">
+                <div className="coverage-bar">
+                  <span
+                    className="coverage-bar-fill"
+                    style={{ width: `${row.coverage.total ? (row.coverage.completed / row.coverage.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="coverage-label">
+                  {row.coverage.completed}/{row.coverage.total} questions covered
+                </span>
               </div>
               <div className="concept-grid">
                 {row.concepts.map((concept) => {
@@ -1861,6 +2699,23 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
                     DSA_PROMPTS.reduce((sum, prompt) => sum + (conceptState[dsaConceptKey(prompt)]?.mastery || 0), 0) /
                       DSA_PROMPTS.length,
                   )}%
+                </span>
+              </div>
+              <div className="coverage-row">
+                <div className="coverage-bar">
+                  <span
+                    className="coverage-bar-fill"
+                    style={{
+                      width: `${
+                        dsaCoverage(dsaAttempts).total
+                          ? (dsaCoverage(dsaAttempts).completed / dsaCoverage(dsaAttempts).total) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+                <span className="coverage-label">
+                  {dsaCoverage(dsaAttempts).completed}/{dsaCoverage(dsaAttempts).total} prompts covered
                 </span>
               </div>
               <div className="concept-grid">
@@ -1896,7 +2751,53 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
   );
 }
 
-function SettingsView({ settings, updateGoal, toggleSubject, toggleCourse, updatePreference, regenerateSet, openCourseSetup }) {
+function SettingsView({
+  settings,
+  syncStatus,
+  syncMessage,
+  updateGoal,
+  toggleSubject,
+  toggleCourse,
+  updatePreference,
+  regenerateSet,
+  openCourseSetup,
+  exportSnapshot,
+}) {
+  const [exportStatus, setExportStatus] = useState("idle");
+
+  async function handleExport() {
+    const json = JSON.stringify(exportSnapshot, null, 2);
+    try {
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cracked-progress-${dateKey()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportStatus("done");
+    } catch {
+      try {
+        await navigator.clipboard.writeText(json);
+        setExportStatus("copied");
+      } catch {
+        setExportStatus("error");
+      }
+    }
+    setTimeout(() => setExportStatus("idle"), 2200);
+  }
+
+  const exportLabel =
+    exportStatus === "done"
+      ? "Saved progress file"
+      : exportStatus === "copied"
+        ? "Copied to clipboard"
+        : exportStatus === "error"
+          ? "Export failed - try again"
+          : "Export progress data";
+
   return (
     <div className="screen settings-screen view-enter">
       <section className="page-heading">
@@ -1962,6 +2863,24 @@ function SettingsView({ settings, updateGoal, toggleSubject, toggleCourse, updat
         </div>
 
         <aside className="settings-panel settings-cards">
+          <div className={classNames("setting-feature-card sync-card", syncStatus)}>
+            <span>
+              <p className="eyebrow">Progress sync</p>
+              <strong>
+                {syncStatus === "synced"
+                  ? "Synced"
+                  : syncStatus === "syncing"
+                    ? "Syncing"
+                    : syncStatus === "checking"
+                      ? "Checking"
+                      : syncStatus === "offline"
+                        ? "Offline"
+                        : "Local only"}
+              </strong>
+              <small>{syncMessage}</small>
+            </span>
+          </div>
+
           <button
             className={classNames("setting-feature-card dark", settings.interviewMode && "enabled")}
             onClick={() => updatePreference("interviewMode", !settings.interviewMode)}
@@ -1995,10 +2914,14 @@ function SettingsView({ settings, updateGoal, toggleSubject, toggleCourse, updat
             <RotateCcw size={20} aria-hidden="true" />
           </button>
 
-          <button className="setting-feature-card" type="button">
+          <button
+            className={classNames("setting-feature-card", exportStatus !== "idle" && "enabled")}
+            type="button"
+            onClick={handleExport}
+          >
             <span>
               <p className="eyebrow">Account</p>
-              <strong>Export progress data</strong>
+              <strong>{exportLabel}</strong>
               <small>Local progress snapshot.</small>
             </span>
             <Download size={20} aria-hidden="true" />
@@ -2034,6 +2957,108 @@ function Verdict({ outcome }) {
   return <span className={classNames("verdict", outcome)}>{icon}{text}</span>;
 }
 
+function AiPanel({ actionLabel, run, resultLabel = "AI", allowFollowUp = false, startWithInput = false }) {
+  const [status, setStatus] = useState("idle");
+  const [result, setResult] = useState("");
+  const [error, setError] = useState("");
+  const [question, setQuestion] = useState("");
+  const [lastPrompt, setLastPrompt] = useState(undefined);
+
+  async function trigger(prompt) {
+    const activePrompt = prompt !== undefined ? prompt : lastPrompt;
+    if (prompt !== undefined) {
+      setLastPrompt(prompt);
+    }
+    setStatus("loading");
+    setError("");
+    try {
+      const text = await run(activePrompt);
+      setResult(text);
+      setStatus("done");
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+      setStatus("error");
+    }
+  }
+
+  if (status === "idle") {
+    return (
+      <button className="ai-trigger" onClick={() => (startWithInput ? setStatus("input") : trigger())}>
+        <Sparkles size={14} aria-hidden="true" />
+        {actionLabel}
+      </button>
+    );
+  }
+
+  if (status === "input") {
+    return (
+      <form
+        className="ai-followup"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!question.trim()) return;
+          trigger(question);
+        }}
+      >
+        <input
+          type="text"
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="Ask a follow-up..."
+        />
+        <button type="submit" aria-label="Send">
+          <Send size={14} aria-hidden="true" />
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <div className="ai-panel">
+      <p className="eyebrow">
+        <Sparkles size={12} aria-hidden="true" />
+        {resultLabel}
+      </p>
+      {status === "loading" && (
+        <p className="ai-loading">
+          <Loader2 size={14} className="spin" aria-hidden="true" />
+          Thinking...
+        </p>
+      )}
+      {status === "error" && (
+        <p className="ai-error">
+          {error}
+          <button className="text-button" onClick={() => trigger()}>
+            Try again
+          </button>
+        </p>
+      )}
+      {status === "done" && <p className="ai-result">{result}</p>}
+      {status === "done" && allowFollowUp && (
+        <form
+          className="ai-followup"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!question.trim()) return;
+            trigger(question);
+            setQuestion("");
+          }}
+        >
+          <input
+            type="text"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Ask a follow-up..."
+          />
+          <button type="submit" aria-label="Send">
+            <Send size={14} aria-hidden="true" />
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function ConceptList({ title, concepts }) {
   return (
     <div className="small-panel">
@@ -2048,14 +3073,4 @@ function ConceptList({ title, concepts }) {
       </div>
     </div>
   );
-}
-
-function connectionText(subject) {
-  const map = {
-    DBMS: "Isolation levels connect directly to transactions, MVCC, locks, and query consistency under concurrency.",
-    OS: "Scheduling choices connect to latency, context switching cost, fairness, and starvation.",
-    CN: "Network concepts stack together: DNS, TCP, TLS, HTTP, caching, and load balancing all affect one request.",
-    OOP: "Design choices connect to coupling, cohesion, testability, and how easily a codebase accepts new behavior.",
-  };
-  return map[subject] || "The concept connects to neighboring ideas in the placement prep map.";
 }
