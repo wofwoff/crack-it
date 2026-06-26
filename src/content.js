@@ -4134,3 +4134,185 @@ export const DSA_PROMPTS = [
     ],
   },
 ];
+
+export const INTERACTIVE_QUESTIONS = [
+  // Ordering / Sequencing
+  {
+    id: "iq-order-tcp",
+    type: "ordering",
+    subject: "CN",
+    concept: "TCP Handshake",
+    difficulty: "medium",
+    title: "TCP 3-Way Handshake Sequencing",
+    instructions: "Arrange the steps of the TCP 3-way handshake in the correct order, starting from the client initiating the connection to the final established state.",
+    steps: [
+      "Client generates a random sequence number x and sends a SYN packet to the server.",
+      "Server receives SYN, allocates resources, generates its own sequence number y, and replies with a SYN-ACK packet (acknowledging x + 1).",
+      "Client receives SYN-ACK, allocates resources, and sends an ACK packet (acknowledging y + 1).",
+      "Server receives ACK, and both sockets transition to the ESTABLISHED state."
+    ],
+    proTip: "TCP uses sequence numbers to synchronize bytes and verify receipt. The handshake guarantees both sides agree on initial sequences and can send/receive data.",
+    lesson: "The TCP 3-way handshake follows the pattern: SYN (Client -> Server), SYN-ACK (Server -> Client), and ACK (Client -> Server). This process synchronizes sequence numbers, checks that both paths are functional, and allocates TCP buffers on both ends before actual application data flows.",
+    remember: "TCP handshake: Client sends SYN -> Server responds SYN-ACK -> Client sends ACK. Only then is it ESTABLISHED."
+  },
+  {
+    id: "iq-order-btree",
+    type: "ordering",
+    subject: "DBMS",
+    concept: "Indexing",
+    difficulty: "hard",
+    title: "B-Tree Insertion and Node Split",
+    instructions: "Order the logical steps of inserting a new key into a B-Tree index, including how splits propagate up the tree.",
+    steps: [
+      "Traverse from the root down to the appropriate leaf node using key comparisons.",
+      "Insert the new key into the leaf node in sorted order.",
+      "Detect that the leaf node size exceeds the maximum allowed keys, causing an overflow.",
+      "Split the overflowed leaf node into two sibling nodes, keeping the median key temporarily.",
+      "Push the median key up into the parent node, creating parent pointers to the split children.",
+      "Propagate splits recursively up to the root if the parent nodes also overflow, creating a new root if necessary."
+    ],
+    proTip: "A B-Tree grows upwards. When a root node splits, the tree increases in height by 1, which keeps the tree completely balanced with all leaves at the same depth.",
+    lesson: "When inserting into a B-Tree, we search for the target leaf, insert, and split if there is an overflow. The split divides keys, pushes the median to the parent, and can trigger recursive splits up to the root, which is how B-Trees maintain their balanced height log(N) lookup guarantees.",
+    remember: "B-Trees grow from the bottom up. Split leaf -> push median to parent -> recurse up. If root splits, height increases."
+  },
+  {
+    id: "iq-order-normalization",
+    type: "ordering",
+    subject: "DBMS",
+    concept: "Normalization",
+    difficulty: "medium",
+    title: "Normal Forms Ordering",
+    instructions: "Sequence the transformations required to normalize a database table step-by-step from unnormalized form up to BCNF.",
+    steps: [
+      "Ensure all column values are atomic (no multi-valued attributes or repeating groups), establishing First Normal Form (1NF).",
+      "Remove partial dependencies (where non-key attributes depend on only part of a composite primary key), establishing Second Normal Form (2NF).",
+      "Remove transitive dependencies (where a non-key attribute depends on another non-key attribute), establishing Third Normal Form (3NF).",
+      "Ensure every determinant is a superkey, resolving remaining functional dependency anomalies to reach Boyce-Codd Normal Form (BCNF)."
+    ],
+    proTip: "Each normal form is a strict subset of the previous one. A table cannot be in 3NF unless it is already in 2NF, and it cannot be in 2NF unless it is in 1NF.",
+    lesson: "Normalization removes redundancy progressively: 1NF requires atomic values; 2NF removes partial key dependencies (relevant for composite keys); 3NF removes transitive dependencies (non-key fields depending on other non-key fields); and BCNF resolves cases where a non-trivial functional dependency exists on a non-superkey.",
+    remember: "1NF = atomic values; 2NF = no partial key dependencies; 3NF = no transitive dependencies; BCNF = determinants must be superkeys."
+  },
+
+  // Categorization
+  {
+    id: "iq-bucket-os",
+    type: "categorize",
+    subject: "OS",
+    concept: "Processes & Threads",
+    difficulty: "medium",
+    title: "Process vs. Thread Characteristics",
+    instructions: "Drag each attribute into the correct bucket depending on whether it describes an Operating System Process or a Thread.",
+    buckets: ["Process", "Thread"],
+    items: [
+      { text: "Has its own isolated virtual memory space.", bucket: "Process" },
+      { text: "Created via fork() in Unix-like environments.", bucket: "Process" },
+      { text: "Heavier context switching overhead due to MMU page table remapping.", bucket: "Process" },
+      { text: "If it crashes, it typically does not crash neighbor siblings directly.", bucket: "Process" },
+      { text: "Shares code segment, heap, and open files with siblings.", bucket: "Thread" },
+      { text: "Has its own stack pointer, registers, and program counter, but no private heap.", bucket: "Thread" },
+      { text: "Extremely fast context switching within the same parent.", bucket: "Thread" },
+      { text: "A segment violation here will crash the entire parent and all sibling routines.", bucket: "Thread" }
+    ],
+    proTip: "Threads share global resources but have private execution states. Processes share almost nothing by default and require IPC (Inter-Process Communication) to talk.",
+    lesson: "Processes are isolated containers with their own memory space (page tables, descriptors) making context switches slower. Threads are execution contexts within a process, sharing memory and files, making communication fast but code errors fatal to siblings.",
+    remember: "Process = separate address space, high isolation; Thread = shared address space, fast context switch, shared heap, separate stack."
+  },
+  {
+    id: "iq-bucket-memory",
+    type: "categorize",
+    subject: "CPP",
+    concept: "Memory Management",
+    difficulty: "medium",
+    title: "Stack vs. Heap Memory Allocation",
+    instructions: "Categorize the traits of computer memory allocation into Stack and Heap memory areas.",
+    buckets: ["Stack", "Heap"],
+    items: [
+      { text: "Automatically managed scope with LIFO (Last-In, First-Out) release.", bucket: "Stack" },
+      { text: "Allocation is extremely fast, requiring only a CPU stack pointer increment.", bucket: "Stack" },
+      { text: "Used for local variables and active function call frames.", bucket: "Stack" },
+      { text: "Limited in capacity, leading to a stack overflow if exceeded.", bucket: "Stack" },
+      { text: "Manually allocated (new/malloc) and released (delete/free) by programmer.", bucket: "Heap" },
+      { text: "Allocation is slower due to allocator searches and memory fragmentation.", bucket: "Heap" },
+      { text: "Shared globally across threads and function call stacks.", bucket: "Heap" },
+      { text: "Much larger memory capacity, limited only by physical RAM and swap space.", bucket: "Heap" }
+    ],
+    proTip: "Heap memory must be carefully managed in C++ to avoid memory leaks. Modern C++ uses smart pointers (std::unique_ptr, std::shared_ptr) to automate heap resource cleanup.",
+    lesson: "The Stack handles fast, scoped local allocations automatically via the call stack. The Heap provides dynamic, large, long-lived memory allocations but requires manual management (malloc/free, new/delete) or smart pointer wrappers to avoid memory leaks.",
+    remember: "Stack = fast, small, LIFO, auto-managed; Heap = slow, large, dynamic, manually managed (or smart pointers)."
+  },
+  {
+    id: "iq-bucket-acid",
+    type: "categorize",
+    subject: "DBMS",
+    concept: "Transactions",
+    difficulty: "easy",
+    title: "ACID vs. BASE Database Guarantees",
+    instructions: "Sort the transactional characteristics into ACID (relational databases) or BASE (distributed NoSQL databases) categories.",
+    buckets: ["ACID", "BASE"],
+    items: [
+      { text: "Atomicity: All operations in a transaction succeed or all fail.", bucket: "ACID" },
+      { text: "Consistency: Database state transitions always respect schema constraints.", bucket: "ACID" },
+      { text: "Isolation: Concurrent executions leave the database in a state as if run sequentially.", bucket: "ACID" },
+      { text: "Durability: Committed data is guaranteed to survive system crashes.", bucket: "ACID" },
+      { text: "Basically Available: The system guarantees availability over absolute data freshness.", bucket: "BASE" },
+      { text: "Soft State: The state of the system can drift over time without active updates.", bucket: "BASE" },
+      { text: "Eventual Consistency: The system eventually becomes consistent when inputs cease.", bucket: "BASE" }
+    ],
+    proTip: "ACID guarantees strong consistency, useful for finance. BASE guarantees high availability in large distributed systems, relaxing consistency to scale globally.",
+    lesson: "ACID transactions provide strict, deterministic guarantees for relational DBs (OLTP). BASE properties (Basically Available, Soft state, Eventual consistency) are designed for large-scale distributed databases that trade consistency for partition tolerance (CAP Theorem).",
+    remember: "ACID = strong consistency, strict schemas, financial data; BASE = eventual consistency, high availability, horizontal scaling."
+  },
+
+  // Cloze / Fill in the blank
+  {
+    id: "iq-cloze-sql",
+    type: "cloze",
+    subject: "DBMS",
+    concept: "SQL Queries",
+    difficulty: "medium",
+    title: "SQL Group By and Having Filter",
+    instructions: "Complete the SQL statement to aggregate records and filter the group results. Fill in the missing clauses.",
+    code: "SELECT department_id, AVG(salary)\nFROM employees\n[BLANK1] department_id\n[BLANK2] AVG(salary) > 50000;",
+    blanks: [
+      { id: "BLANK1", correct: "GROUP BY", placeholder: "aggregation clause" },
+      { id: "BLANK2", correct: "HAVING", placeholder: "group filter clause" }
+    ],
+    proTip: "WHERE filters rows before aggregation. HAVING filters grouped rows after aggregation.",
+    lesson: "In SQL, we use GROUP BY to group rows sharing values in specific columns, and HAVING to apply filter conditions to those groups (like checking aggregated values). WHERE cannot be used for aggregate functions like AVG().",
+    remember: "Use GROUP BY to aggregate, and HAVING (never WHERE) to filter aggregate results."
+  },
+  {
+    id: "iq-cloze-raii",
+    type: "cloze",
+    subject: "OOP",
+    concept: "Design Patterns",
+    difficulty: "hard",
+    title: "C++ RAII Lock Guard Pattern",
+    instructions: "Complete this C++ class representing the RAII pattern for a thread-safe mutex guard. Fill in the class name for the constructor and the destructor syntax.",
+    code: "class LockGuard {\nprivate:\n    Mutex& mtx;\npublic:\n    [BLANK1](Mutex& m) : mtx(m) {\n        mtx.lock();\n    }\n    [BLANK2]LockGuard() {\n        mtx.unlock();\n    }\n};",
+    blanks: [
+      { id: "BLANK1", correct: "LockGuard", placeholder: "constructor name" },
+      { id: "BLANK2", correct: "~", placeholder: "destructor symbol" }
+    ],
+    proTip: "RAII stands for Resource Acquisition Is Initialization. It links resource lifetime (like locks or file handles) to object lifetime, ensuring cleanup when the object goes out of scope.",
+    lesson: "In this LockGuard class, the constructor LockGuard(Mutex& m) locks the mutex on instantiation, and the destructor ~LockGuard() unlocks it when the LockGuard object goes out of scope. This prevents deadlocks even if exceptions occur.",
+    remember: "RAII: Constructor locks/allocates, Destructor (prefix ~) unlocks/releases."
+  },
+  {
+    id: "iq-cloze-python",
+    type: "cloze",
+    subject: "PYTHON",
+    concept: "Syntax & Scoping",
+    difficulty: "easy",
+    title: "Python Generator Statement",
+    instructions: "Fill in the keyword that allows a Python function to yield values one by one as a generator, preserving its execution state.",
+    code: "def fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        [BLANK1] a\n        a, b = b, a + b",
+    blanks: [
+      { id: "BLANK1", correct: "yield", placeholder: "keyword" }
+    ],
+    proTip: "Generators are memory-efficient because they produce items lazily (on demand) rather than returning a fully populated list in memory.",
+    lesson: "The yield keyword suspends a function's execution and sends a value back to the caller, but retains enough state to enable the function to resume where it left off on subsequent calls.",
+    remember: "Use the yield keyword to make a generator in Python, generating items lazily."
+  }
+];

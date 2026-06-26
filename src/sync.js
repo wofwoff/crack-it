@@ -18,17 +18,54 @@ export function markLocalProgressUpdated(at = new Date().toISOString()) {
   return at;
 }
 
+function randomChunk() {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const bytes = new Uint8Array(4);
+
+  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+export function normalizeProgressSyncId(syncId) {
+  return String(syncId || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "");
+}
+
+export function createProgressSyncId() {
+  return ["CRK", randomChunk(), randomChunk()].join("-");
+}
+
 export function getProgressSyncId() {
-  if (CONFIGURED_SYNC_ID.trim()) return CONFIGURED_SYNC_ID.trim();
+  const configured = normalizeProgressSyncId(CONFIGURED_SYNC_ID);
 
   const storage = browserStorage();
-  if (!storage) return "default";
+  if (!storage) return configured || createProgressSyncId();
 
   const saved = storage.getItem(SYNC_ID_STORAGE_KEY);
-  if (saved) return saved;
+  if (saved) return normalizeProgressSyncId(saved);
 
-  storage.setItem(SYNC_ID_STORAGE_KEY, "default");
-  return "default";
+  const syncId = configured || createProgressSyncId();
+  storage.setItem(SYNC_ID_STORAGE_KEY, syncId);
+  return syncId;
+}
+
+export function setProgressSyncId(syncId) {
+  const normalized = normalizeProgressSyncId(syncId);
+  if (!normalized) {
+    throw new Error("Enter a sync ID first.");
+  }
+
+  browserStorage()?.setItem(SYNC_ID_STORAGE_KEY, normalized);
+  return normalized;
 }
 
 export function isProgressSyncConfigured() {
@@ -41,9 +78,9 @@ export function progressSyncDescription() {
   return `Sync ID: ${getProgressSyncId()}`;
 }
 
-function progressEndpoint() {
+function progressEndpoint(syncId = getProgressSyncId()) {
   const baseUrl = PROGRESS_SYNC_URL.replace(/\/$/, "");
-  return `${baseUrl}/progress/${encodeURIComponent(getProgressSyncId())}`;
+  return `${baseUrl}/progress/${encodeURIComponent(syncId)}`;
 }
 
 async function parseError(response) {
@@ -55,10 +92,10 @@ async function parseError(response) {
   }
 }
 
-export async function loadRemoteProgress() {
+export async function loadRemoteProgress(syncId = getProgressSyncId()) {
   if (!isProgressSyncConfigured()) return null;
 
-  const response = await fetch(progressEndpoint(), {
+  const response = await fetch(progressEndpoint(normalizeProgressSyncId(syncId)), {
     method: "GET",
     headers: {
       "x-app-secret": PROGRESS_SYNC_SECRET,
@@ -71,11 +108,11 @@ export async function loadRemoteProgress() {
   return response.json();
 }
 
-export async function saveRemoteProgress(state) {
+export async function saveRemoteProgress(state, syncId = getProgressSyncId()) {
   if (!isProgressSyncConfigured()) return null;
 
   const updatedAt = new Date().toISOString();
-  const response = await fetch(progressEndpoint(), {
+  const response = await fetch(progressEndpoint(normalizeProgressSyncId(syncId)), {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",

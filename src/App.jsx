@@ -8,13 +8,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Code2,
+  Copy,
   Download,
   Flame,
   Home,
+  LogIn,
   Lightbulb,
   Loader2,
   Mic,
   MicOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowRight,
+  Move,
   RotateCcw,
   Send,
   Settings,
@@ -23,7 +29,7 @@ import {
   Timer,
   X,
 } from "lucide-react";
-import { QUESTIONS, DSA_PROMPTS } from "./content";
+import { QUESTIONS, DSA_PROMPTS, INTERACTIVE_QUESTIONS } from "./content";
 import {
   generateApplicationInterviewQuestions,
   gradeDsaAnswer,
@@ -33,15 +39,18 @@ import {
 } from "./llm";
 import {
   getLocalProgressUpdatedAt,
+  getProgressSyncId,
   isProgressSyncConfigured,
   loadRemoteProgress,
   markLocalProgressUpdated,
+  normalizeProgressSyncId,
   progressSyncDescription,
   saveRemoteProgress,
+  setProgressSyncId,
 } from "./sync";
 
 const STORAGE_KEY = "placement-prep-v2";
-const STATE_SCHEMA_VERSION = 4;
+const STATE_SCHEMA_VERSION = 5;
 const AI_TOOLS_ENABLED = isAiConfigured && import.meta.env.VITE_ENABLE_AI_TOOLS === "true";
 const SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON", "OA"];
 const SUBJECT_META = {
@@ -109,8 +118,10 @@ const CORRECT_POINTS = { correct: 1, wrong: 0, blank: 0 };
 const CONTENT_BANK_SIGNATURE = [
   QUESTIONS.length,
   DSA_PROMPTS.length,
+  INTERACTIVE_QUESTIONS.length,
   QUESTIONS.map((question) => question.id).join(","),
   DSA_PROMPTS.map((prompt) => prompt.id).join(","),
+  INTERACTIVE_QUESTIONS.map((q) => q.id).join(","),
 ].join("|");
 
 function dateKey(date = new Date()) {
@@ -269,6 +280,7 @@ function createInitialState() {
     },
     attempts: [],
     dsaAttempts: [],
+    interactiveAttempts: [],
     dailySet: null,
     oaCourseAddedToSelection: true,
     contentBankSignature: CONTENT_BANK_SIGNATURE,
@@ -304,6 +316,7 @@ function normalizeSavedState(saved) {
     },
     conceptState: { ...defaultConceptState(), ...saved.conceptState },
     dsaAttempts: saved.dsaAttempts || [],
+    interactiveAttempts: saved.interactiveAttempts || [],
     dailySet: hasCurrentContent ? saved.dailySet : null,
   };
 }
@@ -475,9 +488,13 @@ function classNames(...values) {
 
 export function App() {
   const [appState, setAppState] = useState(loadState);
+  const [currentSyncId, setCurrentSyncId] = useState(getProgressSyncId);
+  const [syncIdInput, setSyncIdInput] = useState("");
+  const [syncIdActionMessage, setSyncIdActionMessage] = useState("");
   const [syncStatus, setSyncStatus] = useState(() => (isProgressSyncConfigured() ? "checking" : "local"));
   const [syncMessage, setSyncMessage] = useState(progressSyncDescription);
   const [view, setView] = useState("today");
+  const [selectedInteractiveId, setSelectedInteractiveId] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [cardSide, setCardSide] = useState("front");
@@ -554,6 +571,68 @@ export function App() {
       syncReadyRef.current = true;
     }
   }, []);
+
+  const copyCurrentSyncId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(currentSyncId);
+      setSyncIdActionMessage("Sync ID copied.");
+    } catch {
+      setSyncIdActionMessage(`Sync ID: ${currentSyncId}`);
+    }
+  }, [currentSyncId]);
+
+  const loadProgressBySyncId = useCallback(async () => {
+    if (!isProgressSyncConfigured()) {
+      setSyncIdActionMessage("Cloud sync is not configured for this build.");
+      return;
+    }
+
+    const nextSyncId = normalizeProgressSyncId(syncIdInput);
+    if (!nextSyncId) {
+      setSyncIdActionMessage("Enter a sync ID first.");
+      return;
+    }
+
+    if (syncInProgressRef.current) return;
+    syncInProgressRef.current = true;
+    syncReadyRef.current = false;
+
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    setSyncStatus("checking");
+    setSyncMessage(`Loading ${nextSyncId}...`);
+    setSyncIdActionMessage("");
+
+    try {
+      const remote = await loadRemoteProgress(nextSyncId);
+      if (!remote?.state) {
+        throw new Error("No progress found for that sync ID.");
+      }
+
+      const normalized = normalizeSavedState(remote.state);
+      const serialized = JSON.stringify(normalized);
+      const savedSyncId = setProgressSyncId(nextSyncId);
+
+      lastSyncedStateRef.current = serialized;
+      markLocalProgressUpdated(remote.updatedAt);
+      setAppState(normalized);
+      setCurrentSyncId(savedSyncId);
+      setSyncIdInput("");
+      setSyncStatus("synced");
+      setSyncMessage(`Loaded progress for ${savedSyncId}.`);
+      setSyncIdActionMessage("This device will open with that progress from now on.");
+    } catch (err) {
+      setSyncStatus("offline");
+      setSyncMessage(err.message || "Could not load that sync ID.");
+      setSyncIdActionMessage(err.message || "Could not load that sync ID.");
+    } finally {
+      syncInProgressRef.current = false;
+      syncReadyRef.current = true;
+    }
+  }, [syncIdInput]);
 
   useEffect(() => {
     setAppState((state) => {
@@ -1152,6 +1231,10 @@ export function App() {
       setView("settings");
       return;
     }
+    if (view === "interactive-play") {
+      setView("interactive-list");
+      return;
+    }
     setView("today");
   }
 
@@ -1304,6 +1387,7 @@ export function App() {
             interviewStatus={interviewStatus}
             openProgress={() => setView("progress")}
             openPractice={() => setView("practice-setup")}
+            openInteractive={() => setView("interactive-list")}
           />
         )}
 
@@ -1423,8 +1507,14 @@ export function App() {
         {appState.hasCompletedCourseSetup && view === "settings" && (
           <SettingsView
             settings={appState.settings}
+            currentSyncId={currentSyncId}
+            syncIdInput={syncIdInput}
+            syncIdActionMessage={syncIdActionMessage}
             syncStatus={syncStatus}
             syncMessage={syncMessage}
+            setSyncIdInput={setSyncIdInput}
+            copyCurrentSyncId={copyCurrentSyncId}
+            loadProgressBySyncId={loadProgressBySyncId}
             updateGoal={updateGoal}
             toggleSubject={toggleSubject}
             toggleCourse={toggleCourse}
@@ -1432,6 +1522,36 @@ export function App() {
             regenerateSet={regenerateSet}
             openCourseSetup={openCourseSetup}
             exportSnapshot={appState}
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "interactive-list" && (
+          <InteractiveListView
+            attempts={appState.interactiveAttempts}
+            onSelectChallenge={(id) => {
+              setSelectedInteractiveId(id);
+              setView("interactive-play");
+            }}
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "interactive-play" && (
+          <InteractivePlayView
+            challenge={INTERACTIVE_QUESTIONS.find((q) => q.id === selectedInteractiveId)}
+            onBack={() => setView("interactive-list")}
+            recordAttempt={(challengeId, outcome) => {
+              setAppState((state) => {
+                const newAttempt = {
+                  date: dateKey(),
+                  challengeId,
+                  outcome,
+                };
+                return {
+                  ...state,
+                  interactiveAttempts: [...state.interactiveAttempts, newAttempt],
+                };
+              });
+            }}
           />
         )}
       </section>
@@ -1454,7 +1574,7 @@ function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCo
       const Icon = item.icon;
       const isActive =
         (view === item.id) ||
-        (item.id === "today" && (view === "question" || view === "summary" || view === "interview-lab" || view === "interview-question" || (view === "lesson" && lessonOrigin === "question"))) ||
+        (item.id === "today" && (view === "question" || view === "summary" || view === "interview-lab" || view === "interview-question" || view === "interactive-list" || view === "interactive-play" || (view === "lesson" && lessonOrigin === "question"))) ||
         (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || (view === "lesson" && lessonOrigin === "practice")));
       return (
         <button
@@ -1645,6 +1765,7 @@ function TodayView({
   interviewStatus,
   openProgress,
   openPractice,
+  openInteractive,
 }) {
   const total = todaySet.length;
   const percent = total ? Math.round((completedCount / total) * 100) : 0;
@@ -1735,6 +1856,25 @@ function TodayView({
           </button>
         </section>
       )}
+
+      <section className="dsa-teaser interactive-teaser">
+        <div className="dsa-teaser-copy">
+          <span className="course-icon">
+            <Sparkles size={18} aria-hidden="true" style={{ color: "var(--accent)" }} />
+          </span>
+          <div>
+            <p className="eyebrow">Interactive Drills</p>
+            <h2>Puzzles & Sequencing</h2>
+            <p>
+              Test your skills with drag-to-reorder sequences, sorting items into category buckets, and syntax clozes.
+            </p>
+          </div>
+        </div>
+        <button className="dark-button" onClick={openInteractive}>
+          Play Drills
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </section>
 
       {AI_TOOLS_ENABLED && (
         <section className="dsa-teaser interview-teaser">
@@ -2530,12 +2670,11 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
 function PracticeSetupView({ conceptState, attempts, startPractice }) {
   const subjectCards = SUBJECTS.map((subject) => {
     const meta = SUBJECT_META[subject];
-    const concepts = uniqueMcqConceptsForSubject(subject);
-    const mastery = concepts.length
-      ? Math.round(concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length)
-      : 0;
     const coverage = subjectQuestionCoverage(subject, attempts);
-    return { subject, meta, mastery, coverage };
+    const coveragePercent = coverage.total
+      ? Math.round((coverage.completed / coverage.total) * 100)
+      : 0;
+    return { subject, meta, coveragePercent, coverage };
   });
 
   return (
@@ -2546,20 +2685,20 @@ function PracticeSetupView({ conceptState, attempts, startPractice }) {
         <p className="screen-subtitle">Run through every question in one subject, outside the daily set.</p>
       </header>
       <div className="practice-subject-grid">
-        {subjectCards.map(({ subject, meta, mastery, coverage }) => (
+        {subjectCards.map(({ subject, meta, coveragePercent, coverage }) => (
           <button key={subject} className="practice-subject-card" onClick={() => startPractice(subject)}>
             <div className="practice-subject-card-top">
               <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
                 {meta.name}
               </span>
-              <span className="practice-subject-mastery">{mastery}%</span>
+              <span className="practice-subject-mastery">{coveragePercent}%</span>
             </div>
             <p className="practice-subject-detail">{meta.detail}</p>
             <div className="coverage-row">
               <div className="coverage-bar">
                 <span
                   className="coverage-bar-fill"
-                  style={{ width: `${coverage.total ? (coverage.completed / coverage.total) * 100 : 0}%` }}
+                  style={{ width: `${coveragePercent}%` }}
                 />
               </div>
               <span className="coverage-label">
@@ -2626,6 +2765,11 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
     .sort((a, b) => b[1].mastery - a[1].mastery)
     .slice(0, 3);
 
+  const dsaMastery = Math.round(
+    DSA_PROMPTS.reduce((sum, prompt) => sum + (conceptState[dsaConceptKey(prompt)]?.mastery || 0), 0) /
+      DSA_PROMPTS.length
+  );
+
   return (
     <div className="screen progress-screen view-enter">
       <section className="page-heading">
@@ -2666,7 +2810,7 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
                 <div className="coverage-bar">
                   <span
                     className="coverage-bar-fill"
-                    style={{ width: `${row.coverage.total ? (row.coverage.completed / row.coverage.total) * 100 : 0}%` }}
+                    style={{ width: `${row.mastery}%` }}
                   />
                 </div>
                 <span className="coverage-label">
@@ -2694,24 +2838,13 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
             <div className="subject-block">
               <div className="subject-head">
                 <strong>DSA</strong>
-                <span>
-                  {Math.round(
-                    DSA_PROMPTS.reduce((sum, prompt) => sum + (conceptState[dsaConceptKey(prompt)]?.mastery || 0), 0) /
-                      DSA_PROMPTS.length,
-                  )}%
-                </span>
+                <span>{dsaMastery}%</span>
               </div>
               <div className="coverage-row">
                 <div className="coverage-bar">
                   <span
                     className="coverage-bar-fill"
-                    style={{
-                      width: `${
-                        dsaCoverage(dsaAttempts).total
-                          ? (dsaCoverage(dsaAttempts).completed / dsaCoverage(dsaAttempts).total) * 100
-                          : 0
-                      }%`,
-                    }}
+                    style={{ width: `${dsaMastery}%` }}
                   />
                 </div>
                 <span className="coverage-label">
@@ -2753,8 +2886,14 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
 
 function SettingsView({
   settings,
+  currentSyncId,
+  syncIdInput,
+  syncIdActionMessage,
   syncStatus,
   syncMessage,
+  setSyncIdInput,
+  copyCurrentSyncId,
+  loadProgressBySyncId,
   updateGoal,
   toggleSubject,
   toggleCourse,
@@ -2878,6 +3017,35 @@ function SettingsView({
                         : "Local only"}
               </strong>
               <small>{syncMessage}</small>
+              <code className="sync-id-pill">{currentSyncId}</code>
+              <div className="sync-actions">
+                <button type="button" className="small-icon-button" onClick={copyCurrentSyncId} aria-label="Copy sync ID">
+                  <Copy size={15} aria-hidden="true" />
+                </button>
+                <form
+                  className="sync-id-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    loadProgressBySyncId();
+                  }}
+                >
+                  <input
+                    type="text"
+                    inputMode="text"
+                    value={syncIdInput}
+                    onChange={(event) => setSyncIdInput(event.target.value)}
+                    placeholder="Enter sync ID"
+                    aria-label="Sync ID to load"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  <button type="submit" className="small-icon-button" aria-label="Load progress by sync ID">
+                    <LogIn size={15} aria-hidden="true" />
+                  </button>
+                </form>
+              </div>
+              {syncIdActionMessage && <small className="sync-action-message">{syncIdActionMessage}</small>}
             </span>
           </div>
 
@@ -3070,6 +3238,596 @@ function ConceptList({ title, concepts }) {
             <strong>{state.mastery}%</strong>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// INTERACTIVE CHALLENGES (FUN QUESTIONS)
+// ----------------------------------------------------------------------------
+
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+export function InteractiveListView({ attempts, onSelectChallenge }) {
+  const getChallengeStatus = (id) => {
+    const challengeAttempts = attempts.filter((a) => a.challengeId === id);
+    if (!challengeAttempts.length) return "Unattempted";
+    const hasPassed = challengeAttempts.some((a) => a.outcome === "correct");
+    return hasPassed ? "Completed" : "Failed";
+  };
+
+  const completedCount = INTERACTIVE_QUESTIONS.filter((q) => {
+    return attempts.some((a) => a.challengeId === q.id && a.outcome === "correct");
+  }).length;
+
+  const totalCount = INTERACTIVE_QUESTIONS.length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  return (
+    <div className="screen interactive-list-screen view-enter">
+      <header className="page-hero color-wash">
+        <p className="eyebrow">Interactive Drills</p>
+        <h1>Concept Puzzles</h1>
+        <p>Test your procedural and conceptual CS knowledge with interactive ordering, sorting, and fill-in-the-blank puzzles.</p>
+
+        <div className="interactive-progress-bar-container">
+          <div className="interactive-progress-bar-header">
+            <span>Progress: {completedCount} / {totalCount} drills completed</span>
+            <span>{progressPercent}%</span>
+          </div>
+          <div className="interactive-progress-track">
+            <div className="interactive-progress-fill" style={{ width: `${progressPercent}%` }}></div>
+          </div>
+        </div>
+      </header>
+
+      <section className="interactive-challenges-section" aria-label="Interactive challenges list">
+        <div className="interactive-list-grid">
+          {INTERACTIVE_QUESTIONS.map((q) => {
+            const status = getChallengeStatus(q.id);
+            const statusClass = status.toLowerCase();
+            const subjectMeta = SUBJECT_META[q.subject] || { name: q.subject, accent: "#7b7168" };
+
+            let typeLabel = "";
+            if (q.type === "ordering") typeLabel = "Sequencing";
+            else if (q.type === "categorize") typeLabel = "Categorization";
+            else if (q.type === "cloze") typeLabel = "Fill-in-the-blank";
+
+            return (
+              <button
+                key={q.id}
+                className="challenge-card"
+                onClick={() => onSelectChallenge(q.id)}
+              >
+                <div className="challenge-card-header">
+                  <span className="subject-badge" style={{ backgroundColor: subjectMeta.accent }}>
+                    {subjectMeta.name}
+                  </span>
+                  <span className={`status-badge status-${statusClass}`}>
+                    {status}
+                  </span>
+                </div>
+                <h3>{q.title}</h3>
+                <p className="challenge-desc">{q.instructions}</p>
+                <div className="challenge-card-footer">
+                  <span className="type-badge">{typeLabel}</span>
+                  <span className={`difficulty-badge ${q.difficulty}`}>
+                    {q.difficulty}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
+  if (!challenge) return null;
+
+  // State variables for various question types
+  const [userOrder, setUserOrder] = useState([]);
+  const [userAssignments, setUserAssignments] = useState({}); // { itemText: bucketName }
+  const [userCloze, setUserCloze] = useState({}); // { blankId: string }
+
+  const [isChecked, setIsChecked] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  // Animation & Selection states
+  const [swappingIndices, setSwappingIndices] = useState(null); // { first: number, second: number, direction: 'up' | 'down' }
+  const [selectedItemText, setSelectedItemText] = useState(null);
+
+  // Drag and Drop helpers (for ordering)
+  const [activeDragIndex, setActiveDragIndex] = useState(null);
+
+  // Initialize and shuffle questions
+  useEffect(() => {
+    setIsChecked(false);
+    setIsCorrect(false);
+    setRevealed(false);
+    setSwappingIndices(null);
+    setSelectedItemText(null);
+
+    if (challenge.type === "ordering") {
+      setUserOrder(shuffleArray(challenge.steps));
+    } else {
+      setUserOrder([]);
+    }
+
+    setUserAssignments({});
+    setUserCloze({});
+  }, [challenge]);
+
+  // ----------------------------------------------------------------------------
+  // ORDERING LOGIC
+  // ----------------------------------------------------------------------------
+  const handleOrderDragStart = (e, index) => {
+    setActiveDragIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleOrderDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleOrderDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (activeDragIndex === null || activeDragIndex === targetIndex) return;
+    const list = [...userOrder];
+    const draggedItem = list[activeDragIndex];
+    list.splice(activeDragIndex, 1);
+    list.splice(targetIndex, 0, draggedItem);
+    setUserOrder(list);
+    setActiveDragIndex(null);
+  };
+
+  const moveItemUp = (index) => {
+    if (index === 0 || swappingIndices) return;
+    setSwappingIndices({ first: index - 1, second: index, direction: "up" });
+    setTimeout(() => {
+      const list = [...userOrder];
+      const temp = list[index];
+      list[index] = list[index - 1];
+      list[index - 1] = temp;
+      setUserOrder(list);
+      setSwappingIndices(null);
+    }, 180);
+  };
+
+  const moveItemDown = (index) => {
+    if (index === userOrder.length - 1 || swappingIndices) return;
+    setSwappingIndices({ first: index, second: index + 1, direction: "down" });
+    setTimeout(() => {
+      const list = [...userOrder];
+      const temp = list[index];
+      list[index] = list[index + 1];
+      list[index + 1] = temp;
+      setUserOrder(list);
+      setSwappingIndices(null);
+    }, 180);
+  };
+
+  // ----------------------------------------------------------------------------
+  // CATEGORIZATION LOGIC
+  // ----------------------------------------------------------------------------
+
+  const assignItem = (itemText, bucketName) => {
+    setUserAssignments((prev) => ({
+      ...prev,
+      [itemText]: bucketName,
+    }));
+  };
+
+  const unassignItem = (itemText) => {
+    setUserAssignments((prev) => {
+      const next = { ...prev };
+      delete next[itemText];
+      return next;
+    });
+  };
+
+  // Get items not yet placed in any bucket
+  const unassignedItems = challenge.type === "categorize" 
+    ? challenge.items.filter((item) => !userAssignments[item.text])
+    : [];
+
+  const allItemsAssigned = challenge.type === "categorize" && unassignedItems.length === 0;
+
+  // ----------------------------------------------------------------------------
+  // CHECK & REVEAL ANSWERS
+  // ----------------------------------------------------------------------------
+  const checkAnswer = () => {
+    let correct = false;
+
+    if (challenge.type === "ordering") {
+      correct = userOrder.every((step, idx) => step === challenge.steps[idx]);
+    } else if (challenge.type === "categorize") {
+      correct = challenge.items.every((item) => userAssignments[item.text] === item.bucket);
+    } else if (challenge.type === "cloze") {
+      correct = challenge.blanks.every(
+        (blank) => (userCloze[blank.id] || "").trim().toLowerCase() === blank.correct.toLowerCase()
+      );
+    }
+
+    setIsCorrect(correct);
+    setIsChecked(true);
+    recordAttempt(challenge.id, correct ? "correct" : "wrong");
+  };
+
+  const revealAnswers = () => {
+    if (challenge.type === "ordering") {
+      setUserOrder(challenge.steps);
+    } else if (challenge.type === "categorize") {
+      const solution = {};
+      challenge.items.forEach((item) => {
+        solution[item.text] = item.bucket;
+      });
+      setUserAssignments(solution);
+    } else if (challenge.type === "cloze") {
+      const solution = {};
+      challenge.blanks.forEach((blank) => {
+        solution[blank.id] = blank.correct;
+      });
+      setUserCloze(solution);
+    }
+    setIsCorrect(true);
+    setIsChecked(true);
+    setRevealed(true);
+  };
+
+  const resetChallenge = () => {
+    setIsChecked(false);
+    setIsCorrect(false);
+    setRevealed(false);
+    if (challenge.type === "ordering") {
+      setUserOrder(shuffleArray(challenge.steps));
+    } else {
+      setUserOrder([]);
+    }
+    setUserAssignments({});
+    setUserCloze({});
+  };
+
+  // Render variables
+  const subjectMeta = SUBJECT_META[challenge.subject] || { name: challenge.subject, accent: "#7b7168" };
+
+  return (
+    <div className="screen interactive-play-screen view-enter">
+      <div className="challenge-play-container">
+        {/* Eyebrow info bar */}
+        <div className="challenge-play-eyebrow">
+          <span className="subject-badge" style={{ backgroundColor: subjectMeta.accent }}>
+            {subjectMeta.name}
+          </span>
+          <span className="concept-label">{challenge.concept}</span>
+          <span className={`difficulty-badge ${challenge.difficulty}`}>
+            {challenge.difficulty}
+          </span>
+        </div>
+
+        <h1>{challenge.title}</h1>
+        <p className="challenge-instructions-text">{challenge.instructions}</p>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* ORDERING LAYOUT */}
+        {/* ------------------------------------------------------------------ */}
+        {challenge.type === "ordering" && (
+          <div className="ordering-list">
+            {userOrder.map((step, idx) => {
+              const isStepCorrect = isChecked && step === challenge.steps[idx];
+              const isStepIncorrect = isChecked && step !== challenge.steps[idx];
+
+              const isSwappingFirst = swappingIndices && swappingIndices.first === idx;
+              const isSwappingSecond = swappingIndices && swappingIndices.second === idx;
+
+              return (
+                <div
+                  key={idx}
+                  draggable={!isChecked}
+                  onDragStart={(e) => handleOrderDragStart(e, idx)}
+                  onDragOver={handleOrderDragOver}
+                  onDrop={(e) => handleOrderDrop(e, idx)}
+                  className={classNames(
+                    "ordering-item",
+                    isStepCorrect && "step-correct",
+                    isStepIncorrect && "step-incorrect",
+                    activeDragIndex === idx && "dragging",
+                    isSwappingFirst && "swapping-down",
+                    isSwappingSecond && "swapping-up"
+                  )}
+                >
+                  <div className="ordering-left">
+                    <span className="ordering-index">{idx + 1}</span>
+                    {!isChecked && (
+                      <span className="drag-handle" title="Drag to reorder">
+                        <Move size={14} />
+                      </span>
+                    )}
+                    <span className="ordering-text">{step}</span>
+                  </div>
+
+                  {!isChecked && (
+                    <div className="ordering-arrows">
+                      <button
+                        className="arrow-btn"
+                        onClick={() => moveItemUp(idx)}
+                        disabled={idx === 0}
+                        aria-label="Move item up"
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
+                        className="arrow-btn"
+                        onClick={() => moveItemDown(idx)}
+                        disabled={idx === userOrder.length - 1}
+                        aria-label="Move item down"
+                      >
+                        <ArrowDown size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* CATEGORIZATION LAYOUT */}
+        {/* ------------------------------------------------------------------ */}
+        {challenge.type === "categorize" && (
+          <div className="categorize-stage">
+            {/* Unassigned Pool */}
+            {!isChecked && unassignedItems.length > 0 && (
+              <div className="unassigned-pool-panel">
+                <p className="eyebrow">Select an item to categorize ({unassignedItems.length} remaining)</p>
+                <div className="unassigned-pool">
+                  {unassignedItems.map((item) => {
+                    const isSelected = selectedItemText === item.text;
+                    return (
+                      <button
+                        key={item.text}
+                        className={classNames(
+                          "categorize-item",
+                          isSelected && "selected"
+                        )}
+                        onClick={() => {
+                          if (selectedItemText === item.text) {
+                            setSelectedItemText(null);
+                          } else {
+                            setSelectedItemText(item.text);
+                          }
+                        }}
+                      >
+                        <p className="item-text">{item.text}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!isChecked && allItemsAssigned && (
+              <div className="all-placed-banner">
+                <Check size={18} />
+                <span>All items placed! Click &quot;Check Answer&quot; to verify.</span>
+              </div>
+            )}
+
+            {/* Buckets Grid */}
+            <div className="buckets-grid">
+              {challenge.buckets.map((bucketName) => {
+                const assignedItems = challenge.items.filter(
+                  (item) => userAssignments[item.text] === bucketName
+                );
+                const isTargetActive = !!selectedItemText && !isChecked;
+
+                return (
+                  <div
+                    key={bucketName}
+                    className={classNames(
+                      "bucket-zone",
+                      isTargetActive && "active-target"
+                    )}
+                    onClick={() => {
+                      if (isTargetActive) {
+                        assignItem(selectedItemText, bucketName);
+                        setSelectedItemText(null);
+                      }
+                    }}
+                  >
+                    <div className="bucket-header">
+                      <h3>{bucketName}</h3>
+                      <span className="bucket-count">{assignedItems.length} items</span>
+                    </div>
+
+                    <div className="bucket-content">
+                      {assignedItems.length === 0 ? (
+                        <p className="bucket-empty-placeholder">
+                          {isTargetActive ? "Tap here to place item" : "Select an item above, then tap here"}
+                        </p>
+                      ) : (
+                        assignedItems.map((item) => {
+                          const isPlacedCorrectly = isChecked && item.bucket === bucketName;
+                          const isPlacedIncorrectly = isChecked && item.bucket !== bucketName;
+
+                          return (
+                            <div
+                              key={item.text}
+                              className={classNames(
+                                "bucket-item-card",
+                                isPlacedCorrectly && "placed-correct",
+                                isPlacedIncorrectly && "placed-incorrect"
+                              )}
+                            >
+                              <p className="item-text">{item.text}</p>
+                              {!isChecked && (
+                                <button
+                                  className="remove-item-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    unassignItem(item.text);
+                                  }}
+                                  aria-label="Remove item"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                              {isPlacedIncorrectly && (
+                                <span className="correct-bucket-hint">
+                                  Should be in: {item.bucket}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* CLOZE LAYOUT */}
+        {/* ------------------------------------------------------------------ */}
+        {challenge.type === "cloze" && (
+          <div className="cloze-stage">
+            <pre className="cloze-code-block">
+              <code>
+                {challenge.code.split(/(\[BLANK\d+\])/g).map((part, index) => {
+                  const match = part.match(/\[(BLANK\d+)\]/);
+                  if (match) {
+                    const blankId = match[1];
+                    const blankInfo = challenge.blanks.find((b) => b.id === blankId);
+                    const userVal = userCloze[blankId] || "";
+                    const isBlankCorrect =
+                      isChecked && userVal.trim().toLowerCase() === blankInfo.correct.toLowerCase();
+                    const isBlankIncorrect =
+                      isChecked && userVal.trim().toLowerCase() !== blankInfo.correct.toLowerCase();
+
+                    return (
+                      <input
+                        key={blankId}
+                        type="text"
+                        disabled={isChecked}
+                        value={userVal}
+                        className={classNames(
+                          "cloze-input",
+                          isBlankCorrect && "input-correct",
+                          isBlankIncorrect && "input-incorrect"
+                        )}
+                        placeholder={blankInfo ? blankInfo.placeholder : "..."}
+                        style={{
+                          fontSize: "16px",
+                          width: `${Math.max(8, blankInfo ? blankInfo.correct.length + 2 : 10)}ch`,
+                        }}
+                        onChange={(e) => {
+                          setUserCloze({
+                            ...userCloze,
+                            [blankId]: e.target.value,
+                          });
+                        }}
+                      />
+                    );
+                  }
+                  return <span key={index}>{part}</span>;
+                })}
+              </code>
+            </pre>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* ACTION BUTTONS & FEEDBACK PANEL */}
+        {/* ------------------------------------------------------------------ */}
+        <div className="challenge-play-actions">
+          {!isChecked ? (
+            <div className="action-row">
+              <button
+                className="primary-button"
+                onClick={checkAnswer}
+                disabled={challenge.type === "categorize" && !allItemsAssigned}
+              >
+                Check Answer
+              </button>
+            </div>
+          ) : (
+            <div className="feedback-flow">
+              {isCorrect ? (
+                <div className="success-banner view-enter">
+                  <div className="success-banner-header">
+                    <Check size={20} />
+                    <strong>Correct!</strong>
+                  </div>
+                  {revealed && <p className="revealed-note">Correct answer is revealed below.</p>}
+                </div>
+              ) : (
+                <div className="error-banner view-enter">
+                  <div className="error-banner-header">
+                    <X size={20} />
+                    <strong>Some parts are incorrect.</strong>
+                  </div>
+                  <p>Check the red-highlighted items and try again!</p>
+                  <div className="error-actions">
+                    <button className="secondary-button" onClick={resetChallenge}>
+                      <RotateCcw size={14} />
+                      Try Again
+                    </button>
+                    <button className="text-button" onClick={revealAnswers}>
+                      Reveal Answer
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Explanatory components (only show if correct or revealed) */}
+              {(isCorrect || revealed) && (
+                <div className="explanation-reveal view-enter">
+                  {challenge.proTip && (
+                    <div className="pro-tip-card">
+                      <p className="eyebrow">Pro Tip</p>
+                      <p>{challenge.proTip}</p>
+                    </div>
+                  )}
+
+                  {challenge.lesson && (
+                    <div className="lesson-paper">
+                      <h3>Concept Explanation</h3>
+                      <p className="lesson-body-text">{challenge.lesson}</p>
+                    </div>
+                  )}
+
+                  {challenge.remember && (
+                    <div className="remember-box">
+                      <strong>Remember:</strong> {challenge.remember}
+                    </div>
+                  )}
+
+                  <div className="continue-row">
+                    <button className="primary-button continue-btn" onClick={onBack}>
+                      <span>Return to Challenges</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
