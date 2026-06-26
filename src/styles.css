@@ -4077,3 +4077,54 @@ input[type="range"] {
     padding: 14px;
   }
 }
+
+/* ----------------------------------------------------------------------------
+   iOS App Title & Compact Layout Tuning
+   ---------------------------------------------------------------------------- */
+.ios-native .top-center-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  max-width: 45%;
+  justify-content: center;
+}
+
+.ios-native .top-center-title .pill {
+  padding: 2px 6px;
+  font-size: 9px;
+  border-radius: 4px;
+  line-height: 1;
+  text-transform: uppercase;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: var(--neutral-bg);
+  white-space: nowrap;
+}
+
+.ios-native .top-center-title .concept-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ios-native .question-top {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px clamp(18px, 4vw, 36px) !important;
+  border-bottom: 0 !important;
+}
+
+.ios-native .question-context {
+  flex-direction: row !important;
+  align-items: center !important;
+}
+

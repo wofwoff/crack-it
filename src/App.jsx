@@ -49,6 +49,11 @@ import {
   setProgressSyncId,
 } from "./sync";
 
+const isIosApp = typeof window !== "undefined" && (
+  (window.Capacitor && window.Capacitor.platform === "ios") ||
+  /iPad|iPhone|iPod/.test(navigator.userAgent)
+);
+
 const STORAGE_KEY = "placement-prep-v2";
 const STATE_SCHEMA_VERSION = 5;
 const AI_TOOLS_ENABLED = isAiConfigured && import.meta.env.VITE_ENABLE_AI_TOOLS === "true";
@@ -532,6 +537,12 @@ export function App() {
   const syncInProgressRef = useRef(false);
   const appStateRef = useRef(appState);
   const saveTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (isIosApp) {
+      document.body.classList.add("ios-native");
+    }
+  }, []);
 
   useEffect(() => {
     appStateRef.current = appState;
@@ -1358,6 +1369,20 @@ export function App() {
     }));
   }
 
+  const activeQuestionSubject =
+    view === "question" ? currentQuestion?.subject :
+    view === "practice" ? currentPracticeQuestion?.subject :
+    view === "interview-question" ? currentInterviewQuestion?.subject :
+    view === "lesson" ? (QUESTIONS.find((item) => item.id === lessonQuestionId) || currentQuestion)?.subject :
+    null;
+
+  const activeQuestionConcept =
+    view === "question" ? currentQuestion?.concept :
+    view === "practice" ? currentPracticeQuestion?.concept :
+    view === "interview-question" ? currentInterviewQuestion?.concept :
+    view === "lesson" ? (QUESTIONS.find((item) => item.id === lessonQuestionId) || currentQuestion)?.concept :
+    null;
+
   return (
     <main className="app-shell">
       <section
@@ -1375,6 +1400,8 @@ export function App() {
             streak={appState.streak}
             dsaEnabled={appState.settings.selectedCourses.includes("DSA")}
             lessonOrigin={lessonOrigin}
+            activeQuestionSubject={activeQuestionSubject}
+            activeQuestionConcept={activeQuestionConcept}
           />
         )}
 
@@ -1577,7 +1604,19 @@ export function App() {
   );
 }
 
-function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCount, streak, dsaEnabled, lessonOrigin }) {
+function FrameTop({
+  view,
+  setView,
+  onBack,
+  backDisabled,
+  completedCount,
+  totalCount,
+  streak,
+  dsaEnabled,
+  lessonOrigin,
+  activeQuestionSubject,
+  activeQuestionConcept,
+}) {
   const baseNavItems = [
     { id: "today", label: "Today", icon: Home },
     ...(dsaEnabled ? [{ id: "dsa", label: "DSA", icon: Code2 }] : []),
@@ -1607,6 +1646,8 @@ function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCo
     });
   }
 
+  const showCenterTitle = isIosApp && activeQuestionConcept;
+
   return (
     <>
       <header className="frame-top">
@@ -1620,14 +1661,26 @@ function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCo
             <ChevronLeft size={18} aria-hidden="true" />
             <span>Back</span>
           </button>
-          <span className="top-divider" aria-hidden="true" />
-          <button className="brand-button" onClick={() => setView("today")}>
-            <span className="brand-mark">
-              <FlameMark size={18} />
-            </span>
-            <span className="eyebrow">Cracked</span>
-          </button>
+          {!showCenterTitle && (
+            <>
+              <span className="top-divider" aria-hidden="true" />
+              <button className="brand-button" onClick={() => setView("today")}>
+                <span className="brand-mark">
+                  <FlameMark size={18} />
+                </span>
+                <span className="eyebrow">Cracked</span>
+              </button>
+            </>
+          )}
         </div>
+
+        {showCenterTitle && (
+          <div className="top-center-title">
+            <span className="pill neutral">{subjectLabel(activeQuestionSubject)}</span>
+            <span className="concept-text">{activeQuestionConcept}</span>
+          </div>
+        )}
+
         <nav className="top-nav top-nav-desktop" aria-label="Main navigation">
           {renderNavButtons(baseNavItems)}
         </nav>
@@ -2120,8 +2173,12 @@ function QuestionView({
               <ChevronLeft size={18} aria-hidden="true" />
             </button>
           )}
-          <span className="pill neutral">{subjectLabel(question.subject)}</span>
-          <span>{question.concept}</span>
+          {!isIosApp && (
+            <>
+              <span className="pill neutral">{subjectLabel(question.subject)}</span>
+              <span>{question.concept}</span>
+            </>
+          )}
         </div>
         <span className="question-count">{currentIndex + 1} of {total}</span>
       </div>
