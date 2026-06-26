@@ -45,13 +45,15 @@ export function createProgressSyncId() {
 }
 
 export function getProgressSyncId() {
-  const configured = normalizeProgressSyncId(CONFIGURED_SYNC_ID);
+  const configuredSyncId = normalizeProgressSyncId(CONFIGURED_SYNC_ID);
+  const configured = configuredSyncId === "DEFAULT" ? "" : configuredSyncId;
 
   const storage = browserStorage();
   if (!storage) return configured || createProgressSyncId();
 
   const saved = storage.getItem(SYNC_ID_STORAGE_KEY);
-  if (saved) return normalizeProgressSyncId(saved);
+  const normalizedSaved = normalizeProgressSyncId(saved);
+  if (normalizedSaved && normalizedSaved !== "DEFAULT") return normalizedSaved;
 
   const syncId = configured || createProgressSyncId();
   storage.setItem(SYNC_ID_STORAGE_KEY, syncId);
@@ -69,12 +71,11 @@ export function setProgressSyncId(syncId) {
 }
 
 export function isProgressSyncConfigured() {
-  return Boolean(PROGRESS_SYNC_URL && PROGRESS_SYNC_SECRET);
+  return Boolean(PROGRESS_SYNC_URL);
 }
 
 export function progressSyncDescription() {
   if (!PROGRESS_SYNC_URL) return "Add VITE_PROGRESS_SYNC_URL to enable cloud sync.";
-  if (!PROGRESS_SYNC_SECRET) return "Add VITE_PROGRESS_SYNC_SECRET to enable cloud sync.";
   return `Sync ID: ${getProgressSyncId()}`;
 }
 
@@ -94,12 +95,11 @@ async function parseError(response) {
 
 export async function loadRemoteProgress(syncId = getProgressSyncId()) {
   if (!isProgressSyncConfigured()) return null;
+  const headers = PROGRESS_SYNC_SECRET ? { "x-app-secret": PROGRESS_SYNC_SECRET } : {};
 
   const response = await fetch(progressEndpoint(normalizeProgressSyncId(syncId)), {
     method: "GET",
-    headers: {
-      "x-app-secret": PROGRESS_SYNC_SECRET,
-    },
+    headers,
   });
 
   if (response.status === 404) return null;
@@ -112,12 +112,13 @@ export async function saveRemoteProgress(state, syncId = getProgressSyncId()) {
   if (!isProgressSyncConfigured()) return null;
 
   const updatedAt = new Date().toISOString();
+  const headers = {
+    "Content-Type": "application/json",
+    ...(PROGRESS_SYNC_SECRET ? { "x-app-secret": PROGRESS_SYNC_SECRET } : {}),
+  };
   const response = await fetch(progressEndpoint(normalizeProgressSyncId(syncId)), {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "x-app-secret": PROGRESS_SYNC_SECRET,
-    },
+    headers,
     body: JSON.stringify({
       state,
       updatedAt,

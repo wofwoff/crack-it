@@ -25,11 +25,10 @@ Start the app with sync enabled:
 ```bash
 VITE_PROGRESS_SYNC_URL=http://127.0.0.1:8080 \
 VITE_PROGRESS_SYNC_SECRET=choose-a-secret \
-VITE_PROGRESS_SYNC_ID=default \
 npm run dev
 ```
 
-Open the app and check `Settings > Progress sync`.
+Open the app and check `Settings > Progress sync`. A new device creates and remembers its own sync ID automatically. To move a device onto existing progress, type the existing sync ID in Settings and load it; that device will keep using the loaded ID on future opens.
 
 ## Phone Sync
 
@@ -46,7 +45,6 @@ Then use:
 ```bash
 VITE_PROGRESS_SYNC_URL=http://YOUR_MAC_IP:8080
 VITE_PROGRESS_SYNC_SECRET=choose-a-secret
-VITE_PROGRESS_SYNC_ID=default
 ```
 
 For real always-on sync outside your Wi-Fi, deploy the backend somewhere reachable by both devices and keep the same `VITE_PROGRESS_SYNC_*` values in the web/iOS build.
@@ -65,4 +63,4 @@ Sync uses last-write-wins:
 2. The newer snapshot wins.
 3. After that, app changes are pushed automatically after a short debounce.
 
-Use the same `VITE_PROGRESS_SYNC_ID` on Mac, browser, and phone to share one progress timeline.
+Use the sync ID shown in Settings on Mac, browser, and phone to share one progress timeline. `VITE_PROGRESS_SYNC_ID` is only a legacy initial seed; omit it for normal multi-user builds so each fresh device receives a new ID.

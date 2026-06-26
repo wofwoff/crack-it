@@ -81,6 +81,7 @@ app.use((req, res, next) => {
 
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
+  if (req.path.startsWith("/progress/")) return next();
   if (req.header("x-app-secret") !== APP_SHARED_SECRET) {
     return res.status(401).json({ error: "unauthorized" });
   }

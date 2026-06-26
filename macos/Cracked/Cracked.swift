@@ -162,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 }
 
 final class LocalWebServer {
+  private static let stablePort: UInt16 = 41730
   private let rootURL: URL
   private var socketFileDescriptor: Int32 = -1
   private let queue = DispatchQueue(label: "Cracked.LocalWebServer", qos: .userInitiated)
@@ -187,7 +188,7 @@ final class LocalWebServer {
     var address = sockaddr_in()
     address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
     address.sin_family = sa_family_t(AF_INET)
-    address.sin_port = in_port_t(0).bigEndian
+    address.sin_port = in_port_t(Self.stablePort).bigEndian
     address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
 
     let bindResult = withUnsafePointer(to: &address) { pointer in

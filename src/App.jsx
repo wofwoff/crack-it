@@ -321,17 +321,26 @@ function normalizeSavedState(saved) {
   };
 }
 
-function loadState() {
+function loadStateSnapshot() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved) return createInitialState();
-    if (saved.stateSchemaVersion !== STATE_SCHEMA_VERSION) {
-      return createInitialState();
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return { state: createInitialState(), status: "missing" };
     }
-    return normalizeSavedState(saved);
+
+    const saved = JSON.parse(raw);
+    if (saved.stateSchemaVersion !== STATE_SCHEMA_VERSION) {
+      return { state: createInitialState(), status: "invalid" };
+    }
+
+    return { state: normalizeSavedState(saved), status: "valid" };
   } catch {
-    return createInitialState();
+    return { state: createInitialState(), status: "invalid" };
   }
+}
+
+function loadState() {
+  return loadStateSnapshot().state;
 }
 
 function composeDailySet(settings, conceptState) {
@@ -487,7 +496,12 @@ function classNames(...values) {
 }
 
 export function App() {
-  const [appState, setAppState] = useState(loadState);
+  const initialLocalStateStatusRef = useRef("unknown");
+  const [appState, setAppState] = useState(() => {
+    const snapshot = loadStateSnapshot();
+    initialLocalStateStatusRef.current = snapshot.status;
+    return snapshot.state;
+  });
   const [currentSyncId, setCurrentSyncId] = useState(getProgressSyncId);
   const [syncIdInput, setSyncIdInput] = useState("");
   const [syncIdActionMessage, setSyncIdActionMessage] = useState("");
@@ -536,9 +550,13 @@ export function App() {
     try {
       const remote = await loadRemoteProgress();
       const localUpdatedAt = getLocalProgressUpdatedAt();
+      const shouldPreferRemote =
+        !localUpdatedAt ||
+        remote?.updatedAt > localUpdatedAt ||
+        (isInitial && initialLocalStateStatusRef.current !== "valid");
 
       if (remote?.state) {
-        if (!localUpdatedAt || remote.updatedAt > localUpdatedAt) {
+        if (shouldPreferRemote) {
           const normalized = normalizeSavedState(remote.state);
           const serialized = JSON.stringify(normalized);
           lastSyncedStateRef.current = serialized;
@@ -2084,8 +2102,8 @@ function QuestionView({
   useEffect(() => {
     if (answered && answerBarRef.current) {
       setTimeout(() => {
-        answerBarRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 250);
+        answerBarRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
     }
   }, [answered]);
 
@@ -2600,6 +2618,7 @@ function LessonView({ question, onRate }) {
 }
 
 function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgress, openPractice }) {
+  const [copied, setCopied] = useState(false);
   const correct = attempts.filter((attempt) => attempt.outcome === "correct").length;
   const concepts = [...new Set(todaySet.map((question) => question.concept))];
   const wrong = attempts.filter((attempt) => attempt.outcome === "wrong").length;
@@ -2623,6 +2642,30 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
   const strongestName = strongestConcept ? strongestConcept[0] : (concepts[0] || "Daily review");
   const strongestDeltaVal = strongestConcept ? strongestConcept[1] : 8;
   const strongestDeltaStr = strongestDeltaVal >= 0 ? `+${strongestDeltaVal}%` : `${strongestDeltaVal}%`;
+
+  const copyResults = async () => {
+    const grid = todaySet.map((q) => {
+      const attempt = attempts.find((a) => a.questionId === q.id);
+      if (!attempt) return "⬜";
+      if (attempt.outcome === "correct") return "🟩";
+      if (attempt.outcome === "wrong") return "🟥";
+      return "📘";
+    }).join("");
+
+    const text = `Cracked Daily Set Results 🚀\n` +
+      `Streak: ${streak.current} days\n` +
+      `Score: ${correct}/${todaySet.length} (${Math.round((correct / todaySet.length) * 100)}%)\n` +
+      `Grid: ${grid}\n\n` +
+      `Keep cracking CS fundamentals!`;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy results: ", err);
+    }
+  };
 
   return (
     <div className="screen summary-screen">
@@ -2653,6 +2696,10 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
         </div>
         <div className="summary-actions">
           <button className="ghost-button" onClick={goToday}>Back to today</button>
+          <button className="ghost-button" onClick={copyResults} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <Copy size={16} aria-hidden="true" />
+            {copied ? "Copied!" : "Copy results"}
+          </button>
           <button className="primary-button" onClick={openPractice}>
             Practice more questions
             <ChevronRight size={16} aria-hidden="true" />
@@ -3034,6 +3081,12 @@ function SettingsView({
                     inputMode="text"
                     value={syncIdInput}
                     onChange={(event) => setSyncIdInput(event.target.value)}
+                    onPaste={(event) => {
+                      const pastedSyncId = event.clipboardData?.getData("text");
+                      if (!pastedSyncId) return;
+                      event.preventDefault();
+                      setSyncIdInput(normalizeProgressSyncId(pastedSyncId));
+                    }}
                     placeholder="Enter sync ID"
                     aria-label="Sync ID to load"
                     autoCapitalize="characters"

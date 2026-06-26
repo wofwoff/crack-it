@@ -2,6 +2,7 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
     'build',
+    '--build-arg', 'VITE_PROGRESS_SYNC_URL=$_VITE_PROGRESS_SYNC_URL',
     '--build-arg', 'VITE_VERTEX_PROXY_URL=$_VITE_VERTEX_PROXY_URL',
     '--build-arg', 'VITE_VERTEX_PROXY_SECRET=$_VITE_VERTEX_PROXY_SECRET',
     '--build-arg', 'VITE_ENABLE_AI_TOOLS=$_VITE_ENABLE_AI_TOOLS',
