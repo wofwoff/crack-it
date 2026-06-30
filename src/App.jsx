@@ -28,8 +28,11 @@ import {
   Target,
   Timer,
   X,
+  Columns,
+  LayoutGrid,
 } from "lucide-react";
 import { QUESTIONS, DSA_PROMPTS, INTERACTIVE_QUESTIONS } from "./content";
+import { CHEATSHEETS } from "./cheatsheets";
 import {
   generateApplicationInterviewQuestions,
   gradeDsaAnswer,
@@ -501,6 +504,8 @@ export function App() {
   const [lessonQuestionId, setLessonQuestionId] = useState(null);
   const [lessonOrigin, setLessonOrigin] = useState("question");
   const [practiceSubject, setPracticeSubject] = useState(null);
+  const [cheatsheetSubject, setCheatsheetSubject] = useState(null);
+  const [activeDsaPromptOverride, setActiveDsaPromptOverride] = useState(null);
   const [practiceSet, setPracticeSet] = useState([]);
   const [practiceIndex, setPracticeIndex] = useState(0);
   const [practiceSelectedIndex, setPracticeSelectedIndex] = useState(null);
@@ -789,7 +794,7 @@ export function App() {
   const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
   const completedCount = new Set(todaySetAttempts.map((attempt) => attempt.questionId)).size;
   const currentQuestion = todaySet[currentIndex] || todaySet[0] || QUESTIONS[0];
-  const currentDsaPrompt = nextDsaPrompt(appState.settings, appState.conceptState, appState.dsaAttempts);
+  const currentDsaPrompt = activeDsaPromptOverride || nextDsaPrompt(appState.settings, appState.conceptState, appState.dsaAttempts);
   const currentOaQuestion = nextOaQuestion(appState.settings, appState.conceptState, appState.attempts);
   const currentAttempt = todaySetAttempts.find((attempt) => attempt.questionId === currentQuestion.id);
   const responseOutcome =
@@ -844,6 +849,7 @@ export function App() {
     view === "interview-question" ? currentInterviewQuestion?.id : "",
     view === "lesson" ? lessonQuestionId : "",
     view === "dsa" ? currentDsaPrompt?.id : "",
+    view === "cheatsheet" ? cheatsheetSubject : "",
   ].join("|");
 
   useEffect(() => {
@@ -1009,8 +1015,11 @@ export function App() {
     setView("lesson");
   }
 
-  function startPractice(subject) {
-    const subjectSet = composeSubjectPracticeSet(subject, appState.conceptState);
+  function startPractice(subject, conceptFilter = null) {
+    let subjectSet = composeSubjectPracticeSet(subject, appState.conceptState);
+    if (conceptFilter) {
+      subjectSet = subjectSet.filter((question) => question.concept === conceptFilter);
+    }
     const attemptsToday = appState.attempts.filter(
       (attempt) => attempt.date === dateKey() && attempt.source === "practice",
     );
@@ -1144,7 +1153,15 @@ export function App() {
 
   function exitPractice() {
     setPracticeSubject(null);
-    setView("practice-setup");
+    setPracticeSet([]);
+    setPracticeIndex(0);
+    setPracticeSelectedIndex(null);
+    setPracticeCardSide("front");
+    if (cheatsheetSubject) {
+      setView("cheatsheet");
+    } else {
+      setView("practice-setup");
+    }
   }
 
   function completeCourseSetup(selectedCourses, dailyGoal = appState.settings.dailyGoal) {
@@ -1216,7 +1233,25 @@ export function App() {
       return;
     }
     if (view === "practice-summary") {
+      if (cheatsheetSubject) {
+        setView("cheatsheet");
+      } else {
+        setView("practice-setup");
+      }
+      return;
+    }
+    if (view === "cheatsheet") {
+      setCheatsheetSubject(null);
       setView("practice-setup");
+      return;
+    }
+    if (view === "dsa") {
+      if (activeDsaPromptOverride) {
+        setActiveDsaPromptOverride(null);
+        setView("cheatsheet");
+        return;
+      }
+      setView("today");
       return;
     }
     if (view === "interview-question" || view === "interview-lab") {
@@ -1414,7 +1449,8 @@ export function App() {
             attempts={todayDsaAttempts}
             recordDsaAttempt={recordDsaAttempt}
             goToday={() => setView("today")}
-            goProgress={() => setView("progress")}
+            goProgress={activeDsaPromptOverride ? () => { setActiveDsaPromptOverride(null); setView("cheatsheet"); } : () => setView("progress")}
+            isPracticeMode={Boolean(activeDsaPromptOverride)}
           />
         )}
 
@@ -1444,7 +1480,54 @@ export function App() {
         )}
 
         {appState.hasCompletedCourseSetup && view === "practice-setup" && (
-          <PracticeSetupView conceptState={appState.conceptState} attempts={appState.attempts} startPractice={startPractice} />
+          <PracticeSetupView
+            conceptState={appState.conceptState}
+            attempts={appState.attempts}
+            dsaAttempts={appState.dsaAttempts}
+            openCheatsheet={(subject) => {
+              setCheatsheetSubject(subject);
+              setView("cheatsheet");
+            }}
+            startPractice={(subject) => {
+              if (subject === "DSA") {
+                const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
+                const unanswered = DSA_PROMPTS.find((p) => !todayDsaAttempts.some((a) => a.promptId === p.id)) || DSA_PROMPTS[0];
+                if (unanswered) {
+                  setActiveDsaPromptOverride(unanswered);
+                  setView("dsa");
+                }
+              } else {
+                startPractice(subject);
+              }
+            }}
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "cheatsheet" && (
+          <CheatsheetView
+            subject={cheatsheetSubject}
+            attempts={appState.attempts}
+            dsaAttempts={appState.dsaAttempts}
+            startPractice={(subject, conceptFilter) => {
+              if (subject === "DSA") {
+                const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
+                const matching = conceptFilter
+                  ? DSA_PROMPTS.filter((p) => p.concept === conceptFilter)
+                  : DSA_PROMPTS;
+                const unanswered = matching.find((p) => !todayDsaAttempts.some((a) => a.promptId === p.id)) || matching[0];
+                if (unanswered) {
+                  setActiveDsaPromptOverride(unanswered);
+                  setView("dsa");
+                }
+              } else {
+                startPractice(subject, conceptFilter);
+              }
+            }}
+            openDsaPrompt={(prompt) => {
+              setActiveDsaPromptOverride(prompt);
+              setView("dsa");
+            }}
+          />
         )}
 
         {appState.hasCompletedCourseSetup && view === "practice" && (
@@ -1469,8 +1552,17 @@ export function App() {
             subject={practiceSubject}
             practiceSet={practiceSet}
             attempts={practiceAttemptsToday}
-            goPracticeSetup={() => setView("practice-setup")}
-            goToday={() => setView("today")}
+            goPracticeSetup={() => {
+              if (cheatsheetSubject) {
+                setView("cheatsheet");
+              } else {
+                setView("practice-setup");
+              }
+            }}
+            goToday={() => {
+              setCheatsheetSubject(null);
+              setView("today");
+            }}
           />
         )}
 
@@ -1575,7 +1667,7 @@ function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCo
       const isActive =
         (view === item.id) ||
         (item.id === "today" && (view === "question" || view === "summary" || view === "interview-lab" || view === "interview-question" || view === "interactive-list" || view === "interactive-play" || (view === "lesson" && lessonOrigin === "question"))) ||
-        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || (view === "lesson" && lessonOrigin === "practice")));
+        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || view === "cheatsheet" || (view === "lesson" && lessonOrigin === "practice")));
       return (
         <button
           key={item.id}
@@ -2236,7 +2328,7 @@ function QuestionView({
   );
 }
 
-function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
+function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress, isPracticeMode = false }) {
   const [draft, setDraft] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [rated, setRated] = useState(null);
@@ -2520,7 +2612,7 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
           </button>
           {alreadyRated || rated ? (
             <button className="primary-button" onClick={goProgress}>
-              View progress
+              {isPracticeMode ? "Back to cheatsheet" : "View progress"}
               <ChevronRight size={16} aria-hidden="true" />
             </button>
           ) : null}
@@ -2667,10 +2759,17 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
   );
 }
 
-function PracticeSetupView({ conceptState, attempts, startPractice }) {
-  const subjectCards = SUBJECTS.map((subject) => {
+function PracticeSetupView({ conceptState, attempts, dsaAttempts = [], openCheatsheet, startPractice }) {
+  const PRACTICE_SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON", "OA", "DSA"];
+
+  const subjectCards = PRACTICE_SUBJECTS.map((subject) => {
     const meta = SUBJECT_META[subject];
-    const coverage = subjectQuestionCoverage(subject, attempts);
+    let coverage = { completed: 0, total: 0 };
+    if (subject === "DSA") {
+      coverage = dsaCoverage(dsaAttempts);
+    } else {
+      coverage = subjectQuestionCoverage(subject, attempts);
+    }
     const coveragePercent = coverage.total
       ? Math.round((coverage.completed / coverage.total) * 100)
       : 0;
@@ -2682,11 +2781,11 @@ function PracticeSetupView({ conceptState, attempts, startPractice }) {
       <header className="screen-header">
         <p className="eyebrow">Practice by topic</p>
         <h1>Pick a course to drill.</h1>
-        <p className="screen-subtitle">Run through every question in one subject, outside the daily set.</p>
+        <p className="screen-subtitle">Select a subject to read its cheatsheet or start practice questions directly.</p>
       </header>
       <div className="practice-subject-grid">
         {subjectCards.map(({ subject, meta, coveragePercent, coverage }) => (
-          <button key={subject} className="practice-subject-card" onClick={() => startPractice(subject)}>
+          <div key={subject} className="practice-subject-card" onClick={() => openCheatsheet(subject)}>
             <div className="practice-subject-card-top">
               <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
                 {meta.name}
@@ -2694,19 +2793,224 @@ function PracticeSetupView({ conceptState, attempts, startPractice }) {
               <span className="practice-subject-mastery">{coveragePercent}%</span>
             </div>
             <p className="practice-subject-detail">{meta.detail}</p>
-            <div className="coverage-row">
+            <div className="coverage-row" style={{ marginBottom: "4px" }}>
               <div className="coverage-bar">
                 <span
                   className="coverage-bar-fill"
-                  style={{ width: `${coveragePercent}%` }}
+                  style={{ width: `${coveragePercent}%`, backgroundColor: meta.accent }}
                 />
               </div>
               <span className="coverage-label">
-                {coverage.completed}/{coverage.total} questions covered
+                {coverage.completed}/{coverage.total} {subject === "DSA" ? "prompts" : "questions"} covered
               </span>
             </div>
-          </button>
+            <div className="practice-card-actions">
+              <button
+                className="ghost-button small-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openCheatsheet(subject);
+                }}
+              >
+                Cheatsheet
+              </button>
+              <button
+                className="primary-button small-action"
+                style={{ backgroundColor: meta.accent, borderColor: meta.accent }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startPractice(subject);
+                }}
+              >
+                Practice
+              </button>
+            </div>
+          </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function CheatsheetView({ subject, attempts, dsaAttempts = [], startPractice, openDsaPrompt }) {
+  const meta = SUBJECT_META[subject] || { name: subject, accent: "#7b7168" };
+  const cheatsheetData = CHEATSHEETS[subject] || [];
+
+  let coverage = { completed: 0, total: 0 };
+  if (subject === "DSA") {
+    coverage = dsaCoverage(dsaAttempts);
+  } else {
+    coverage = subjectQuestionCoverage(subject, attempts);
+  }
+  const coveragePercent = coverage.total ? Math.round((coverage.completed / coverage.total) * 100) : 0;
+
+  const [expandedTopic, setExpandedTopic] = useState(null);
+  const [displayMode, setDisplayMode] = useState("reader"); // "reader" or "board"
+  const [activeTopicIndex, setActiveTopicIndex] = useState(0);
+
+  const toggleTopic = (topicName) => {
+    setExpandedTopic(expandedTopic === topicName ? null : topicName);
+  };
+
+  const activeTopic = cheatsheetData[activeTopicIndex] || cheatsheetData[0];
+
+  return (
+    <div className="screen cheatsheet-screen view-enter">
+      <div className="cheatsheet-header-row">
+        <div className="cheatsheet-header">
+          <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
+            {meta.name}
+          </span>
+          <h1>{meta.name} Cheatsheet</h1>
+          <p className="cheatsheet-subtitle">{meta.detail}</p>
+        </div>
+
+        {cheatsheetData.length > 0 && (
+          <div className="cheatsheet-mode-toggle">
+            <button
+              className={classNames("toggle-btn", displayMode === "reader" && "active")}
+              onClick={() => setDisplayMode("reader")}
+              title="Reader View (Split Pane)"
+            >
+              <Columns size={14} aria-hidden="true" />
+              <span>Reader View</span>
+            </button>
+            <button
+              className={classNames("toggle-btn", displayMode === "board" && "active")}
+              onClick={() => setDisplayMode("board")}
+              title="Board View (Grid)"
+            >
+              <LayoutGrid size={14} aria-hidden="true" />
+              <span>Board View</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="cheatsheet-practice-card" style={{ borderColor: meta.accent + "33" }}>
+        <div className="practice-card-info">
+          <h2>Subject Practice</h2>
+          <p>Test your knowledge with practice questions for the entire subject.</p>
+          <div className="coverage-row">
+            <div className="coverage-bar">
+              <span className="coverage-bar-fill" style={{ width: `${coveragePercent}%`, backgroundColor: meta.accent }} />
+            </div>
+            <span className="coverage-label">
+              {coverage.completed}/{coverage.total} {subject === "DSA" ? "prompts" : "questions"} covered
+            </span>
+          </div>
+        </div>
+        <button className="primary-button" style={{ backgroundColor: meta.accent }} onClick={() => startPractice(subject)}>
+          Start Practice
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="cheatsheet-content-container">
+        {cheatsheetData.length === 0 ? (
+          <p className="no-topics">No cheatsheet data available for this subject.</p>
+        ) : (
+          <>
+            {/* Mobile Accordion View (Hidden on desktop) */}
+            <div className="cheatsheet-mobile-accordion">
+              <div className="topics-accordion">
+                {cheatsheetData.map((t) => {
+                  const isExpanded = expandedTopic === t.topic;
+
+                  return (
+                    <div key={t.topic} className={classNames("cheatsheet-topic-item", isExpanded && "expanded")}>
+                      <button className="topic-trigger" onClick={() => toggleTopic(t.topic)}>
+                        <span className="topic-title">{t.topic}</span>
+                        <div className="topic-trigger-right">
+                          <span className="arrow-icon">{isExpanded ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="topic-content view-enter">
+                          <p className="topic-brief">{t.brief}</p>
+                          {t.subtopics && t.subtopics.length > 0 && (
+                            <div className="subtopics-list">
+                              {t.subtopics.map((sub, sIdx) => (
+                                <div key={sIdx} className="subtopic-card">
+                                  <span className="subtopic-name">{sub.name}</span>
+                                  <p className="subtopic-explanation">{sub.explanation}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Desktop Views (Hidden on mobile) */}
+            <div className="cheatsheet-desktop-content">
+              {displayMode === "reader" ? (
+                /* Reader View: Split Pane */
+                <div className="cheatsheet-split-layout">
+                  <aside className="cheatsheet-sidebar">
+                    <p className="sidebar-title">Topics</p>
+                    <nav className="sidebar-nav">
+                      {cheatsheetData.map((t, idx) => (
+                        <button
+                          key={t.topic}
+                          className={classNames("sidebar-item", activeTopicIndex === idx && "active")}
+                          style={activeTopicIndex === idx ? { borderLeftColor: meta.accent, color: meta.accent, fontWeight: "700" } : {}}
+                          onClick={() => setActiveTopicIndex(idx)}
+                        >
+                          {t.topic}
+                        </button>
+                      ))}
+                    </nav>
+                  </aside>
+
+                  <main className="cheatsheet-reader-panel view-enter" key={activeTopic?.topic}>
+                    <h2 className="reader-topic-title">{activeTopic?.topic}</h2>
+                    <p className="reader-topic-brief">{activeTopic?.brief}</p>
+                    {activeTopic?.subtopics && activeTopic.subtopics.length > 0 && (
+                      <div className="reader-subtopics-section">
+                        <h3>Subtopics</h3>
+                        <div className="reader-subtopics-grid">
+                          {activeTopic.subtopics.map((sub, sIdx) => (
+                            <div key={sIdx} className="reader-subtopic-card">
+                              <span className="subtopic-name">{sub.name}</span>
+                              <p className="subtopic-explanation">{sub.explanation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </main>
+                </div>
+              ) : (
+                /* Board View: Grid Board */
+                <div className="cheatsheet-grid-board">
+                  {cheatsheetData.map((t) => (
+                    <div key={t.topic} className="board-topic-card">
+                      <h3 className="board-topic-title" style={{ borderLeftColor: meta.accent }}>
+                        {t.topic}
+                      </h3>
+                      <p className="board-topic-brief">{t.brief}</p>
+                      {t.subtopics && t.subtopics.length > 0 && (
+                        <div className="board-subtopics-list">
+                          {t.subtopics.map((sub, sIdx) => (
+                            <div key={sIdx} className="board-subtopic-item">
+                              <span className="subtopic-name">{sub.name}</span>
+                              <p className="subtopic-explanation">{sub.explanation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
