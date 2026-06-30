@@ -9,12 +9,24 @@ function browserStorage() {
   return typeof window === "undefined" ? null : window.localStorage;
 }
 
+export function saveStorageItem(key, value) {
+  const storage = browserStorage();
+  storage?.setItem(key, value);
+  if (typeof window !== "undefined" && window.webkit?.messageHandlers?.saveStorage) {
+    window.webkit.messageHandlers.saveStorage.postMessage({ key, value });
+  }
+}
+
 export function getLocalProgressUpdatedAt() {
-  return browserStorage()?.getItem(LOCAL_UPDATED_AT_KEY) || "";
+  const val = browserStorage()?.getItem(LOCAL_UPDATED_AT_KEY) || "";
+  if (val) {
+    saveStorageItem(LOCAL_UPDATED_AT_KEY, val);
+  }
+  return val;
 }
 
 export function markLocalProgressUpdated(at = new Date().toISOString()) {
-  browserStorage()?.setItem(LOCAL_UPDATED_AT_KEY, at);
+  saveStorageItem(LOCAL_UPDATED_AT_KEY, at);
   return at;
 }
 
@@ -53,10 +65,13 @@ export function getProgressSyncId() {
 
   const saved = storage.getItem(SYNC_ID_STORAGE_KEY);
   const normalizedSaved = normalizeProgressSyncId(saved);
-  if (normalizedSaved && normalizedSaved !== "DEFAULT") return normalizedSaved;
+  if (normalizedSaved && normalizedSaved !== "DEFAULT") {
+    saveStorageItem(SYNC_ID_STORAGE_KEY, normalizedSaved);
+    return normalizedSaved;
+  }
 
   const syncId = configured || createProgressSyncId();
-  storage.setItem(SYNC_ID_STORAGE_KEY, syncId);
+  saveStorageItem(SYNC_ID_STORAGE_KEY, syncId);
   return syncId;
 }
 
@@ -66,7 +81,7 @@ export function setProgressSyncId(syncId) {
     throw new Error("Enter a sync ID first.");
   }
 
-  browserStorage()?.setItem(SYNC_ID_STORAGE_KEY, normalized);
+  saveStorageItem(SYNC_ID_STORAGE_KEY, normalized);
   return normalized;
 }
 

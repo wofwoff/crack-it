@@ -23,3 +23,5 @@ Durable product decision: AI-generated interview questions must be situational/a
 Durable product decision: daily session counts refer only to the configured MCQ daily set; DSA, logical aptitude, generated interview questions, and extra practice must not inflate the daily numerator or denominator.
 
 Durable naming decision: the former OA section should be presented as Logical Aptitude or Aptitude Reasoning in user-facing copy, not as OA practice.
+
+## Imported Claude Cowork project instructions

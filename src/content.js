@@ -3,6 +3,14 @@
 // The correct option keeps fix: "". Every distractor explains why it is wrong in `fix`.
 // Subjects: DBMS, OS, CN, OOP, CPP, PYTHON, OA. DSA prompts are self-graded logic drills.
 
+import { NEW_CN } from "../new-questions-cn.js";
+import { NEW_CPP } from "../new-questions-cpp.js";
+import { NEW_DBMS } from "../new-questions-dbms.js";
+import { NEW_OA } from "../new-questions-oa.js";
+import { NEW_OOP } from "../new-questions-oop.js";
+import { NEW_OS } from "../new-questions-os.js";
+import { NEW_PYTHON } from "../new-questions-python.js";
+
 export const QUESTIONS = [
   // ----------------------------------------------------------------------------
   // DBMS
@@ -2429,10 +2437,10 @@ export const QUESTIONS = [
     concept: "Copy Constructor",
     difficulty: "hard",
     stem:
-      "`class Buffer { char* data; public: Buffer(int n) { data = new char[n]; } };` has no explicit copy constructor or destructor. Code does `Buffer a(10); Buffer b = a;` then lets both go out of scope, and the program crashes with a heap corruption error. Why?",
+      "`class Buffer { char* data; public: Buffer(int n) { data = new char[n]; } ~Buffer() { delete[] data; } };` has no explicit copy constructor. Code does `Buffer a(10); Buffer b = a;` then lets both go out of scope, and the program crashes with a heap corruption error. Why?",
     options: [
       {
-        text: "The compiler-generated copy constructor copies the `data` pointer's address, not the buffer it points to — `a` and `b` end up sharing one buffer, and each object's (also compiler-generated, missing) destructor would double-free it",
+        text: "The compiler-generated copy constructor copies the `data` pointer's address, not the buffer it points to — `a` and `b` end up sharing one buffer, and each object's destructor frees it, so the second one to go out of scope double-frees already-freed memory",
         sub: "Default shallow copy of a raw pointer member",
         fix: "",
       },
@@ -2459,9 +2467,9 @@ export const QUESTIONS = [
     proTip:
       "Any class managing a raw resource (pointer, handle, fd) needs the Rule of Three/Five: define copy constructor, copy assignment, and destructor together (and move constructor/assignment in modern C++) — or better, hold the resource in a `std::unique_ptr`/`std::vector` and get correct behavior for free.",
     lesson:
-      "Without a user-defined copy constructor, C++ generates one that performs a memberwise shallow copy — for a raw pointer member, that copies the address, not the pointee. Two objects then alias the same heap buffer. When both go out of scope, each runs the (also default) destructor, which here does nothing special — but if a destructor freed `data`, it would free the same memory twice (double free), a classic heap-corruption bug. The fix is a proper deep-copy copy constructor, or RAII via a smart pointer/container that already implements correct copy semantics.",
-    remember: "Default copy constructor does a shallow copy: raw pointer members get their address copied, not their data — two objects end up sharing one buffer, setting up a double free.",
-    interviewAnswer: "Because Buffer doesn't define its own copy constructor, the compiler generates one that just copies the data pointer's value — the address — rather than allocating a new buffer and copying the bytes. So after `Buffer b = a;`, both a and b point at the exact same heap allocation. When they go out of scope, if there were a destructor freeing data, it would run twice on the same pointer, causing the heap corruption — this is the classic case for why a class managing a raw resource needs the Rule of Three or Five, or should just use a smart pointer instead.",
+      "Without a user-defined copy constructor, C++ generates one that performs a memberwise shallow copy — for a raw pointer member, that copies the address, not the pointee. Two objects then alias the same heap buffer. When both go out of scope, each runs the destructor, which calls `delete[] data` — the same memory twice (double free), a classic heap-corruption bug. The fix is a proper deep-copy copy constructor, or RAII via a smart pointer/container that already implements correct copy semantics.",
+    remember: "Default copy constructor does a shallow copy: raw pointer members get their address copied, not their data — two objects end up sharing one buffer, setting up a double free when both destructors run.",
+    interviewAnswer: "Because Buffer doesn't define its own copy constructor, the compiler generates one that just copies the data pointer's value — the address — rather than allocating a new buffer and copying the bytes. So after `Buffer b = a;`, both a and b point at the exact same heap allocation. When they go out of scope, the destructor runs twice on the same pointer — once for each object — causing the heap corruption. This is the classic case for why a class managing a raw resource needs the Rule of Three or Five, or should just use a smart pointer instead.",
   },
   {
     id: "q-cpp-iterator-001",
@@ -3436,39 +3444,39 @@ export const QUESTIONS = [
     concept: "Statement Conclusions",
     difficulty: "medium",
     stem:
-      "Statement: 'The company will shortlist candidates who solve at least 70% of the OA correctly.' Conclusion I: Solving 70% guarantees shortlisting. Conclusion II: Solving below 70% means the candidate will not be shortlisted under this rule. Which follows?",
+      "Statement: 'The company will shortlist candidates who solve at least 70% of the OA correctly.' Conclusion I: Solving 70% guarantees shortlisting. Conclusion II: Solving below 70% means the candidate will not be shortlisted. Which follows?",
     options: [
       {
         text: "Only I follows",
-        sub: "Reads the threshold as sufficient",
-        fix:
-          "The statement says candidates who solve at least 70% will be shortlisted, so I follows. But the wording also creates a cutoff for this rule.",
+        sub: "Reads the threshold as a sufficient condition",
+        fix: "",
       },
       {
         text: "Only II follows",
         sub: "Reads only the rejection side",
         fix:
-          "The statement directly says the at-least-70 group will be shortlisted, so I also follows.",
+          "The statement directly says the at-least-70 group will be shortlisted, so I follows, not II.",
       },
       {
         text: "Both I and II follow",
-        sub: "Threshold defines the shortlist condition in this rule",
-        fix: "",
+        sub: "Treats the threshold as also a necessary condition",
+        fix:
+          "The statement only says solving at least 70% is enough to be shortlisted — it never says it's the only way to be shortlisted. Concluding that scoring below 70% rules someone out assumes the rule also works in reverse, which the statement doesn't state. That's the converse error.",
       },
       {
         text: "Neither follows",
         sub: "Treats shortlist as unrelated to score",
         fix:
-          "The statement explicitly links shortlist status to solving at least 70% correctly.",
+          "The statement explicitly links shortlist status to solving at least 70% correctly, so I does follow.",
       },
     ],
-    correctIndex: 2,
+    correctIndex: 0,
     proTip:
-      "For statement-conclusion questions, stay inside the sentence. Do not add real-world hiring exceptions unless the statement mentions them.",
+      "For statement-conclusion questions, stay inside the sentence. A statement of the form 'X who do A will get B' only gives you a sufficient condition (A implies B) — never assume it's also necessary (not-A implies not-B) unless the statement explicitly says so.",
     lesson:
-      "The statement defines a rule: candidates who solve at least 70% are shortlisted. That supports conclusion I. Under the same rule, a score below 70% does not meet the stated condition, so conclusion II follows as well.",
-    remember: "For statement-conclusion questions, stay strictly inside the wording of the rule given — don't import outside hiring or real-world exceptions that the statement never mentions.",
-    interviewAnswer: "The statement directly says candidates scoring at least 70% will be shortlisted, so conclusion I follows immediately from the rule as written. Since that same rule defines the cutoff, scoring below 70% means the stated condition isn't met, so conclusion II follows too — both are just two sides of the same threshold.",
+      "The statement defines a rule: candidates who solve at least 70% are shortlisted. That supports conclusion I — it's a direct restatement of the sufficient condition given. Conclusion II claims the converse: that failing to meet the threshold rules a candidate out. The statement never says 70% is the only path to being shortlisted, so II is an unsupported assumption, not a valid conclusion.",
+    remember: "A sufficient-condition statement ('A leads to B') only supports conclusions that restate A implies B — never assume the converse (not-A implies not-B) unless the statement says so explicitly.",
+    interviewAnswer: "The statement directly says candidates scoring at least 70% will be shortlisted, so conclusion I follows immediately — it's just a restatement of the rule. Conclusion II doesn't follow: the statement gives a sufficient condition for being shortlisted, not an exclusive one, so we can't conclude that missing the threshold guarantees rejection — the company could have other criteria the statement doesn't mention. That's the classic converse error in statement-conclusion questions.",
   },
   {
     id: "q-oa-odd-001",
@@ -3870,6 +3878,13 @@ export const QUESTIONS = [
     remember: "For \"N days from today\" calendar questions, reduce N modulo 7 to find the effective shift, since full weeks never change the day of the week.",
     interviewAnswer: "I divided 45 by 7 and found it leaves a remainder of 3, meaning only 3 days actually shift the weekday after all the full weeks cancel out. Counting 3 days forward from Wednesday lands on Saturday.",
   },
+  ...NEW_DBMS,
+  ...NEW_OS,
+  ...NEW_CN,
+  ...NEW_OOP,
+  ...NEW_CPP,
+  ...NEW_PYTHON,
+  ...NEW_OA,
 ];
 
 export const DSA_PROMPTS = [

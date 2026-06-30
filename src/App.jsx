@@ -50,6 +50,7 @@ import {
   progressSyncDescription,
   saveRemoteProgress,
   setProgressSyncId,
+  saveStorageItem,
 } from "./sync";
 
 const isIosApp = typeof window !== "undefined" && (
@@ -705,7 +706,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    saveStorageItem(STORAGE_KEY, JSON.stringify(appState));
     if (hasStoredInitialLocalStateRef.current && syncReadyRef.current) {
       markLocalProgressUpdated();
     } else {

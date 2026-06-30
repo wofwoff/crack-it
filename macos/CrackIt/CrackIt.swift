@@ -2,7 +2,7 @@ import AppKit
 import Darwin
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
   private var window: NSWindow?
   private var webView: WKWebView?
   private var webServer: LocalWebServer?
@@ -15,6 +15,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     configuration.websiteDataStore = .default()
     configuration.defaultWebpagePreferences.allowsContentJavaScript = true
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+
+    let userContentController = WKUserContentController()
+    userContentController.add(self, name: "saveStorage")
+
+    let keys = ["placement-prep-v2", "cracked-progress-sync-id", "cracked-progress-local-updated-at"]
+    var scriptSource = ""
+    for key in keys {
+      if let val = UserDefaults.standard.string(forKey: "native-storage-\(key)") {
+        let escapedVal = val.replacingOccurrences(of: "\\", with: "\\\\")
+                            .replacingOccurrences(of: "'", with: "\\'")
+                            .replacingOccurrences(of: "\"", with: "\\\"")
+                            .replacingOccurrences(of: "\n", with: "\\n")
+                            .replacingOccurrences(of: "\r", with: "\\r")
+        scriptSource += "localStorage.setItem('\(key)', '\(escapedVal)');\n"
+      }
+    }
+
+    if !scriptSource.isEmpty {
+      let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+      userContentController.addUserScript(userScript)
+    }
+    configuration.userContentController = userContentController
 
     let webView = WKWebView(frame: .zero, configuration: configuration)
     webView.navigationDelegate = self
@@ -158,6 +180,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     decisionHandler: @escaping (WKPermissionDecision) -> Void
   ) {
     decisionHandler(.prompt)
+  }
+
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    if message.name == "saveStorage",
+       let body = message.body as? [String: Any],
+       let key = body["key"] as? String,
+       let value = body["value"] as? String {
+      UserDefaults.standard.set(value, forKey: "native-storage-\(key)")
+      UserDefaults.standard.synchronize()
+    }
   }
 }
 
