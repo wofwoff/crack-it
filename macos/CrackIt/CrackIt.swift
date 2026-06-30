@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       backing: .buffered,
       defer: false
     )
-    window.title = "Cracked"
+    window.title = "CrackIt"
     window.minSize = NSSize(width: 1024, height: 680)
     window.contentView = webView
     window.makeKeyAndOrderFront(nil)
@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let appMenu = NSMenu()
     appMenu.addItem(
       NSMenuItem(
-        title: "Quit Cracked",
+        title: "Quit CrackIt",
         action: #selector(NSApplication.terminate(_:)),
         keyEquivalent: "q"
       )
@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Cracked</title>
+        <title>CrackIt</title>
         <style>
           body {
             margin: 0;
@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       </head>
       <body>
         <main>
-          <h1>Cracked could not start.</h1>
+          <h1>CrackIt could not start.</h1>
           <p>\(message)</p>
         </main>
       </body>
@@ -165,7 +165,7 @@ final class LocalWebServer {
   private static let stablePort: UInt16 = 41730
   private let rootURL: URL
   private var socketFileDescriptor: Int32 = -1
-  private let queue = DispatchQueue(label: "Cracked.LocalWebServer", qos: .userInitiated)
+  private let queue = DispatchQueue(label: "CrackIt.LocalWebServer", qos: .userInitiated)
   private(set) var port: UInt16 = 0
 
   init(rootURL: URL) {

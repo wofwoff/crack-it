@@ -1,5 +1,5 @@
 {
-  "name": "cracked",
+  "name": "crackit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "ios:sync": "npm run build && npm run ios:assets && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "mac:build": "vite build --base=./ && node scripts/build-mac-app.mjs",
-    "mac:open": "npm run mac:build && open build/mac/Cracked.app"
+    "mac:open": "npm run mac:build && open build/mac/CrackIt.app"
   },
   "dependencies": {
     "@capacitor/cli": "^8.4.1",

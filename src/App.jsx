@@ -1387,7 +1387,7 @@ export function App() {
     <main className="app-shell">
       <section
         className={classNames("app-frame", appState.hasCompletedCourseSetup && "has-frame-top")}
-        aria-label="Cracked application"
+        aria-label="CrackIt application"
       >
         {appState.hasCompletedCourseSetup && (
           <FrameTop
@@ -1668,7 +1668,7 @@ function FrameTop({
                 <span className="brand-mark">
                   <FlameMark size={18} />
                 </span>
-                <span className="eyebrow">Cracked</span>
+                <span className="eyebrow">CrackIt</span>
               </button>
             </>
           )}
@@ -1720,7 +1720,7 @@ function CourseSetupView({ selectedCourses, onComplete }) {
   return (
     <div className="screen setup-screen">
       <section className="setup-hero color-wash">
-        <p className="eyebrow">Cracked setup</p>
+        <p className="eyebrow">CrackIt setup</p>
         <h1>Set up your prep.</h1>
         <p>
           Choose the subjects, daily pace, and DSA mode that should appear in
@@ -1865,7 +1865,7 @@ function TodayView({
     <div className="screen today-screen view-enter">
       <section className="hero-row">
         <div>
-          <p className="eyebrow">Cracked</p>
+          <p className="eyebrow">CrackIt</p>
           <h1>{greeting()}.</h1>
         </div>
         <p className="date-label">{readableDate()}</p>
@@ -2641,6 +2641,20 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
   );
 }
 
+function getRealExampleText(stem) {
+  if (!stem) return "";
+  const trimmed = stem.trim();
+  if (trimmed.endsWith("?")) {
+    const matches = [...trimmed.matchAll(/[\.\?!]['"’]?(?:\s+|$)/g)];
+    if (matches.length >= 2) {
+      const boundaryMatch = matches[matches.length - 2];
+      const endIdx = boundaryMatch.index + boundaryMatch[0].trim().length;
+      return trimmed.substring(0, endIdx).trim();
+    }
+  }
+  return stem;
+}
+
 function LessonView({ question, onRate }) {
   return (
     <div className="screen lesson-screen">
@@ -2651,7 +2665,7 @@ function LessonView({ question, onRate }) {
           <p>{question.lesson}</p>
           <div className="callout lesson">
             <p className="eyebrow">Real example</p>
-            <p>{question.stem}</p>
+            <p>{getRealExampleText(question.stem)}</p>
           </div>
           {question.interviewAnswer && (
             <div className="callout neutral">
@@ -2709,7 +2723,7 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
       return "📘";
     }).join("");
 
-    const text = `Cracked Daily Set Results 🚀\n` +
+    const text = `CrackIt Daily Set Results 🚀\n` +
       `Streak: ${streak.current} days\n` +
       `Score: ${correct}/${todaySet.length} (${Math.round((correct / todaySet.length) * 100)}%)\n` +
       `Grid: ${grid}\n\n` +
@@ -3015,7 +3029,7 @@ function SettingsView({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `cracked-progress-${dateKey()}.json`;
+      link.download = `crackit-progress-${dateKey()}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Cracked — a single-page React app for spaced-repetition practice of CS fundamentals (DBMS, OS, CN, OOP) and DSA logic drills, wrapped with Capacitor for iOS. There is no backend; all state lives in `localStorage` on the device.
+CrackIt — a single-page React app for spaced-repetition practice of CS fundamentals (DBMS, OS, CN, OOP) and DSA logic drills, wrapped with Capacitor for iOS. There is no backend; all state lives in `localStorage` on the device.
 
 ## Commands
 

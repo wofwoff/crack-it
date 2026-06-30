@@ -1,6 +1,6 @@
-# Cracked Progress Sync
+# CrackIt Progress Sync
 
-Cracked now supports progress sync through the existing backend.
+CrackIt now supports progress sync through the existing backend.
 
 The app still works offline with `localStorage`. When sync env vars are present, it also pushes and pulls the same progress snapshot through:
 

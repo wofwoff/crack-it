@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Cracked</string>
+        <string>CrackIt</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,9 +25,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Cracked uses the microphone to let you dictate DSA practice answers.</string>
+	<string>CrackIt uses the microphone to let you dictate DSA practice answers.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Cracked uses speech recognition to turn your dictated DSA answer into text.</string>
+	<string>CrackIt uses speech recognition to turn your dictated DSA answer into text.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

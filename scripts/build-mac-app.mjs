@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import sharp from "sharp";
 
 const root = process.cwd();
-const appName = "Cracked";
+const appName = "CrackIt";
 const buildDir = path.join(root, "build", "mac");
 const appDir = path.join(buildDir, `${appName}.app`);
 const contentsDir = path.join(appDir, "Contents");

@@ -25,7 +25,7 @@ const splashSvg = `
   <g transform="translate(1203.37 1032.5) scale(15)">
     <path d="${flamePath}" fill="#C87A28"/>
   </g>
-  <text x="1366" y="1602" text-anchor="middle" font-family="Georgia, serif" font-size="118" font-style="italic" fill="#1A1714">Cracked</text>
+  <text x="1366" y="1602" text-anchor="middle" font-family="Georgia, serif" font-size="118" font-style="italic" fill="#1A1714">CrackIt</text>
   <text x="1366" y="1692" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="42" font-weight="600" letter-spacing="13" fill="#B0A89E">DAILY RETRIEVAL PRACTICE</text>
 </svg>`;
 

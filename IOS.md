@@ -1,10 +1,10 @@
 # iOS Build Notes
 
-Cracked is wrapped with Capacitor for iOS.
+CrackIt is wrapped with Capacitor for iOS.
 
 ## App Metadata
 
-- App name: `Cracked`
+- App name: `CrackIt`
 - Bundle identifier: `com.wafi.placementprep`
 - Web bundle: `dist`
 - Native project: `ios/App/App.xcodeproj`

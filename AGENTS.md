@@ -6,7 +6,7 @@ Before making substantial visual changes, use the Product Design plugin's `get-c
 
 When implementing from a selected generated mock, treat that image as the source of truth for layout, component anatomy, density, spacing, color, typography, visible content, and hierarchy.
 
-Durable design decision: use Option D, "Flame Mark", from `Logo Exploration.html` as the iOS app icon direction for Cracked.
+Durable design decision: use Option D, "Flame Mark", from `Logo Exploration.html` as the iOS app icon direction for CrackIt.
 
 Durable design decision: keep the top bar fixed during app use and include a persistent back button in that bar.
 
@@ -18,7 +18,7 @@ Durable behavior decision: chatbot/follow-up inputs must never trigger iOS viewp
 
 Durable product decision: unfinished or placeholder learning affordances should be hidden or replaced with content-specific guidance instead of appearing as tappable features.
 
-Durable product decision: AI-generated interview questions must be situational/application-level only, scoped to the user's selected Cracked subjects and concepts, especially for CSE fundamentals.
+Durable product decision: AI-generated interview questions must be situational/application-level only, scoped to the user's selected CrackIt subjects and concepts, especially for CSE fundamentals.
 
 Durable product decision: daily session counts refer only to the configured MCQ daily set; DSA, logical aptitude, generated interview questions, and extra practice must not inflate the daily numerator or denominator.
 

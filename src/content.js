@@ -1,4 +1,4 @@
-// Content bank for Cracked.
+// Content bank for CrackIt.
 // Each MCQ: { id, subject, concept, difficulty, stem, options[{text, sub, fix}], correctIndex, proTip, lesson }
 // The correct option keeps fix: "". Every distractor explains why it is wrong in `fix`.
 // Subjects: DBMS, OS, CN, OOP, CPP, PYTHON, OA. DSA prompts are self-graded logic drills.
