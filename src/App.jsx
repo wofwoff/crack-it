@@ -3198,208 +3198,74 @@ function SettingsView({
   setSyncIdInput,
   copyCurrentSyncId,
   loadProgressBySyncId,
-  updateGoal,
-  toggleSubject,
-  toggleCourse,
-  updatePreference,
   regenerateSet,
-  openCourseSetup,
-  exportSnapshot,
 }) {
-  const [exportStatus, setExportStatus] = useState("idle");
-
-  async function handleExport() {
-    const json = JSON.stringify(exportSnapshot, null, 2);
-    try {
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `cracked-progress-${dateKey()}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setExportStatus("done");
-    } catch {
-      try {
-        await navigator.clipboard.writeText(json);
-        setExportStatus("copied");
-      } catch {
-        setExportStatus("error");
-      }
-    }
-    setTimeout(() => setExportStatus("idle"), 2200);
-  }
-
-  const exportLabel =
-    exportStatus === "done"
-      ? "Saved progress file"
-      : exportStatus === "copied"
-        ? "Copied to clipboard"
-        : exportStatus === "error"
-          ? "Export failed - try again"
-          : "Export progress data";
-
   return (
-    <div className="screen settings-screen view-enter">
+    <div className="screen settings-screen view-enter" style={{ maxWidth: "480px", margin: "0 auto" }}>
       <section className="page-heading">
         <p className="eyebrow">Settings</p>
         <h1>Daily loop</h1>
       </section>
-      <section className="settings-layout">
-        <div className="settings-panel primary-settings">
-          <div className="setting-section">
-            <div className="section-heading">
-              <p className="eyebrow">Daily goal</p>
-              <span>~{Math.max(8, settings.dailyGoal * 2)} min</span>
-            </div>
-            <div className="goal-number compact">
-              <span>{settings.dailyGoal}</span>
-              <small>questions/day</small>
-            </div>
-            <div className="stepper">
-              <button
-                className="icon-button"
-                onClick={() => updateGoal(Math.max(3, settings.dailyGoal - 1))}
-                aria-label="Decrease daily goal"
-              >
-                -
-              </button>
-              <input
-                type="range"
-                min="3"
-                max="10"
-                value={settings.dailyGoal}
-                onChange={(event) => updateGoal(event.target.value)}
-                aria-label="Daily goal"
-              />
-              <button
-                className="icon-button"
-                onClick={() => updateGoal(Math.min(10, settings.dailyGoal + 1))}
-                aria-label="Increase daily goal"
-              >
-                +
-              </button>
-            </div>
-          </div>
 
-          <div className="setting-section">
-            <div className="section-heading">
-              <p className="eyebrow">Active subjects</p>
-              <button className="text-button" onClick={openCourseSetup}>Full setup</button>
-            </div>
-            <div className="subject-toggles">
-              {COURSE_OPTIONS.map((course) => (
-                <button
-                  key={course.id}
-                  className={classNames("toggle-chip", settings.selectedCourses.includes(course.id) && "enabled")}
-                  style={{ "--chip-accent": SUBJECT_META[course.id].accent }}
-                  onClick={() => course.type === "mcq" ? toggleSubject(course.id) : toggleCourse(course.id)}
-                >
-                  {settings.selectedCourses.includes(course.id) ? <Check size={15} /> : <X size={15} />}
-                  {course.id}
+      <div className="settings-cards" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Progress Sync Card */}
+        <div className={classNames("setting-feature-card sync-card", syncStatus)}>
+          <span>
+            <p className="eyebrow">Progress sync</p>
+            <strong>
+              {syncStatus === "synced"
+                ? "Synced"
+                : syncStatus === "syncing"
+                  ? "Syncing"
+                  : syncStatus === "checking"
+                    ? "Checking"
+                    : syncStatus === "offline"
+                      ? "Offline"
+                      : "Local only"}
+            </strong>
+            <small>{syncMessage}</small>
+            <code className="sync-id-pill">{currentSyncId}</code>
+            <div className="sync-actions">
+              <button type="button" className="small-icon-button" onClick={copyCurrentSyncId} aria-label="Copy sync ID">
+                <Copy size={15} aria-hidden="true" />
+              </button>
+              <form
+                className="sync-id-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  loadProgressBySyncId();
+                }}
+              >
+                <input
+                  type="text"
+                  inputMode="text"
+                  value={syncIdInput}
+                  onChange={(event) => setSyncIdInput(event.target.value)}
+                  placeholder="Enter sync ID"
+                  aria-label="Sync ID to load"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck="false"
+                />
+                <button type="submit" className="small-icon-button" aria-label="Load progress by sync ID">
+                  <LogIn size={15} aria-hidden="true" />
                 </button>
-              ))}
+              </form>
             </div>
-          </div>
+            {syncIdActionMessage && <small className="sync-action-message">{syncIdActionMessage}</small>}
+          </span>
         </div>
 
-        <aside className="settings-panel settings-cards">
-          <div className={classNames("setting-feature-card sync-card", syncStatus)}>
-            <span>
-              <p className="eyebrow">Progress sync</p>
-              <strong>
-                {syncStatus === "synced"
-                  ? "Synced"
-                  : syncStatus === "syncing"
-                    ? "Syncing"
-                    : syncStatus === "checking"
-                      ? "Checking"
-                      : syncStatus === "offline"
-                        ? "Offline"
-                        : "Local only"}
-              </strong>
-              <small>{syncMessage}</small>
-              <code className="sync-id-pill">{currentSyncId}</code>
-              <div className="sync-actions">
-                <button type="button" className="small-icon-button" onClick={copyCurrentSyncId} aria-label="Copy sync ID">
-                  <Copy size={15} aria-hidden="true" />
-                </button>
-                <form
-                  className="sync-id-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    loadProgressBySyncId();
-                  }}
-                >
-                  <input
-                    type="text"
-                    inputMode="text"
-                    value={syncIdInput}
-                    onChange={(event) => setSyncIdInput(event.target.value)}
-                    placeholder="Enter sync ID"
-                    aria-label="Sync ID to load"
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck="false"
-                  />
-                  <button type="submit" className="small-icon-button" aria-label="Load progress by sync ID">
-                    <LogIn size={15} aria-hidden="true" />
-                  </button>
-                </form>
-              </div>
-              {syncIdActionMessage && <small className="sync-action-message">{syncIdActionMessage}</small>}
-            </span>
-          </div>
-
-          <button
-            className={classNames("setting-feature-card dark", settings.interviewMode && "enabled")}
-            onClick={() => updatePreference("interviewMode", !settings.interviewMode)}
-          >
-            <span>
-              <p className="eyebrow">Interview mode</p>
-              <strong>{settings.interviewMode ? "Timed practice" : "Open practice"}</strong>
-              <small>Timer, no hints, placement pressure.</small>
-            </span>
-            <span className="toggle-switch" aria-hidden="true" />
-          </button>
-
-          <button
-            className={classNames("setting-feature-card", settings.remindersEnabled && "enabled")}
-            onClick={() => updatePreference("remindersEnabled", !settings.remindersEnabled)}
-          >
-            <span>
-              <p className="eyebrow">Daily nudge</p>
-              <strong>{settings.reminderTime}</strong>
-              <small>Keep the habit warm.</small>
-            </span>
-            <Bell size={20} aria-hidden="true" />
-          </button>
-
-          <button className="setting-feature-card danger" onClick={regenerateSet}>
-            <span>
-              <p className="eyebrow">Today</p>
-              <strong>Rebuild set</strong>
-              <small>Use due reviews and weak areas.</small>
-            </span>
-            <RotateCcw size={20} aria-hidden="true" />
-          </button>
-
-          <button
-            className={classNames("setting-feature-card", exportStatus !== "idle" && "enabled")}
-            type="button"
-            onClick={handleExport}
-          >
-            <span>
-              <p className="eyebrow">Account</p>
-              <strong>{exportLabel}</strong>
-              <small>Local progress snapshot.</small>
-            </span>
-            <Download size={20} aria-hidden="true" />
-          </button>
-        </aside>
-      </section>
+        {/* Rebuild Set Card */}
+        <button className="setting-feature-card danger" onClick={regenerateSet}>
+          <span>
+            <p className="eyebrow">Today</p>
+            <strong>Rebuild set</strong>
+            <small>Use due reviews and weak areas.</small>
+          </span>
+          <RotateCcw size={20} aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
