@@ -1593,12 +1593,6 @@ export function App() {
             streak={appState.streak}
             accuracy={accuracy}
             selectedCourses={appState.settings.selectedCourses}
-          />
-        )}
-
-        {appState.hasCompletedCourseSetup && view === "settings" && (
-          <SettingsView
-            settings={appState.settings}
             currentSyncId={currentSyncId}
             syncIdInput={syncIdInput}
             syncIdActionMessage={syncIdActionMessage}
@@ -1607,13 +1601,7 @@ export function App() {
             setSyncIdInput={setSyncIdInput}
             copyCurrentSyncId={copyCurrentSyncId}
             loadProgressBySyncId={loadProgressBySyncId}
-            updateGoal={updateGoal}
-            toggleSubject={toggleSubject}
-            toggleCourse={toggleCourse}
-            updatePreference={updatePreference}
             regenerateSet={regenerateSet}
-            openCourseSetup={openCourseSetup}
-            exportSnapshot={appState}
           />
         )}
 
@@ -1657,7 +1645,6 @@ function FrameTop({ view, setView, onBack, backDisabled, completedCount, totalCo
     ...(dsaEnabled ? [{ id: "dsa", label: "DSA", icon: Code2 }] : []),
     { id: "practice-setup", label: "Practice", icon: BookOpen },
     { id: "progress", label: "Progress", icon: BarChart3 },
-    { id: "settings", label: "Settings", icon: Settings },
   ];
   const mobileNavItems = baseNavItems;
 
@@ -3040,8 +3027,24 @@ function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, 
   );
 }
 
-function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, selectedCourses }) {
-  const activeSubjects = selectedCourses.filter((course) => SUBJECTS.includes(course));
+function ProgressView({
+  conceptState,
+  attempts,
+  dsaAttempts,
+  streak,
+  accuracy,
+  selectedCourses,
+  currentSyncId,
+  syncIdInput,
+  syncIdActionMessage,
+  syncStatus,
+  syncMessage,
+  setSyncIdInput,
+  copyCurrentSyncId,
+  loadProgressBySyncId,
+  regenerateSet,
+}) {
+  const activeSubjects = selectedCourses.filter((subject) => SUBJECTS.includes(subject));
   const subjectRows = activeSubjects.map((subject) => {
     const concepts = uniqueMcqConceptsForSubject(subject);
     const mastery = Math.round(
@@ -3184,88 +3187,93 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
           </div>
         </div>
       </section>
-    </div>
-  );
-}
 
-function SettingsView({
-  settings,
-  currentSyncId,
-  syncIdInput,
-  syncIdActionMessage,
-  syncStatus,
-  syncMessage,
-  setSyncIdInput,
-  copyCurrentSyncId,
-  loadProgressBySyncId,
-  regenerateSet,
-}) {
-  return (
-    <div className="screen settings-screen view-enter" style={{ maxWidth: "480px", margin: "0 auto" }}>
-      <section className="page-heading">
-        <p className="eyebrow">Settings</p>
-        <h1>Daily loop</h1>
-      </section>
-
-      <div className="settings-cards" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <section className="progress-settings-section">
         {/* Progress Sync Card */}
         <div className={classNames("setting-feature-card sync-card", syncStatus)}>
-          <span>
-            <p className="eyebrow">Progress sync</p>
-            <strong>
-              {syncStatus === "synced"
-                ? "Synced"
-                : syncStatus === "syncing"
-                  ? "Syncing"
-                  : syncStatus === "checking"
-                    ? "Checking"
-                    : syncStatus === "offline"
-                      ? "Offline"
-                      : "Local only"}
-            </strong>
-            <small>{syncMessage}</small>
-            <code className="sync-id-pill">{currentSyncId}</code>
-            <div className="sync-actions">
-              <button type="button" className="small-icon-button" onClick={copyCurrentSyncId} aria-label="Copy sync ID">
-                <Copy size={15} aria-hidden="true" />
-              </button>
+          <div className="sync-card-layout">
+            <div className="sync-card-header">
+              <div>
+                <p className="eyebrow">Progress sync</p>
+                <strong style={{ display: "block", marginTop: "4px" }}>
+                  {syncStatus === "synced"
+                    ? "Synced"
+                    : syncStatus === "syncing"
+                      ? "Syncing"
+                      : syncStatus === "checking"
+                        ? "Checking"
+                        : syncStatus === "offline"
+                          ? "Offline"
+                          : "Local only"}
+                </strong>
+                <small className="sync-status-message">{syncMessage}</small>
+              </div>
+              <div className="sync-id-display">
+                <span className="sync-id-label">Device Sync ID</span>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "4px" }}>
+                  <code className="sync-id-code">{currentSyncId}</code>
+                  <button
+                    type="button"
+                    className="copy-sync-button"
+                    onClick={copyCurrentSyncId}
+                  >
+                    <Copy size={13} aria-hidden="true" />
+                    <span>Copy ID</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="sync-card-divider" />
+
+            <div className="sync-card-actions">
               <form
-                className="sync-id-form"
+                className="sync-load-form"
                 onSubmit={(event) => {
                   event.preventDefault();
                   loadProgressBySyncId();
                 }}
               >
-                <input
-                  type="text"
-                  inputMode="text"
-                  value={syncIdInput}
-                  onChange={(event) => setSyncIdInput(event.target.value)}
-                  placeholder="Enter sync ID"
-                  aria-label="Sync ID to load"
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck="false"
-                />
-                <button type="submit" className="small-icon-button" aria-label="Load progress by sync ID">
-                  <LogIn size={15} aria-hidden="true" />
-                </button>
+                <div className="sync-input-wrapper">
+                  <label htmlFor="sync-id-field" className="sync-input-label">
+                    Load progress from another device
+                  </label>
+                  <div className="sync-input-row">
+                    <input
+                      id="sync-id-field"
+                      type="text"
+                      inputMode="text"
+                      value={syncIdInput}
+                      onChange={(event) => setSyncIdInput(event.target.value)}
+                      placeholder="Enter another Sync ID"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck="false"
+                    />
+                    <button type="submit" className="primary-button small-action sync-submit-btn">
+                      <LogIn size={14} aria-hidden="true" />
+                      <span>Link Device</span>
+                    </button>
+                  </div>
+                </div>
               </form>
+              {syncIdActionMessage && (
+                <p className="sync-action-feedback">{syncIdActionMessage}</p>
+              )}
             </div>
-            {syncIdActionMessage && <small className="sync-action-message">{syncIdActionMessage}</small>}
-          </span>
+          </div>
         </div>
 
         {/* Rebuild Set Card */}
-        <button className="setting-feature-card danger" onClick={regenerateSet}>
+        <button className="setting-feature-card danger rebuild-card" onClick={regenerateSet}>
           <span>
             <p className="eyebrow">Today</p>
             <strong>Rebuild set</strong>
-            <small>Use due reviews and weak areas.</small>
+            <small>Recreate your daily practice queue.</small>
           </span>
           <RotateCcw size={20} aria-hidden="true" />
         </button>
-      </div>
+      </section>
     </div>
   );
 }
