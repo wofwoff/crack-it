@@ -28,8 +28,11 @@ import {
   Target,
   Timer,
   X,
+  Columns,
+  LayoutGrid,
 } from "lucide-react";
 import { QUESTIONS, DSA_PROMPTS, INTERACTIVE_QUESTIONS } from "./content";
+import { CHEATSHEETS } from "./cheatsheets";
 import {
   generateApplicationInterviewQuestions,
   gradeDsaAnswer,
@@ -520,6 +523,8 @@ export function App() {
   const [lessonQuestionId, setLessonQuestionId] = useState(null);
   const [lessonOrigin, setLessonOrigin] = useState("question");
   const [practiceSubject, setPracticeSubject] = useState(null);
+  const [cheatsheetSubject, setCheatsheetSubject] = useState(null);
+  const [activeDsaPromptOverride, setActiveDsaPromptOverride] = useState(null);
   const [practiceSet, setPracticeSet] = useState([]);
   const [practiceIndex, setPracticeIndex] = useState(0);
   const [practiceSelectedIndex, setPracticeSelectedIndex] = useState(null);
@@ -818,7 +823,7 @@ export function App() {
   const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
   const completedCount = new Set(todaySetAttempts.map((attempt) => attempt.questionId)).size;
   const currentQuestion = todaySet[currentIndex] || todaySet[0] || QUESTIONS[0];
-  const currentDsaPrompt = nextDsaPrompt(appState.settings, appState.conceptState, appState.dsaAttempts);
+  const currentDsaPrompt = activeDsaPromptOverride || nextDsaPrompt(appState.settings, appState.conceptState, appState.dsaAttempts);
   const currentOaQuestion = nextOaQuestion(appState.settings, appState.conceptState, appState.attempts);
   const currentAttempt = todaySetAttempts.find((attempt) => attempt.questionId === currentQuestion.id);
   const responseOutcome =
@@ -873,6 +878,7 @@ export function App() {
     view === "interview-question" ? currentInterviewQuestion?.id : "",
     view === "lesson" ? lessonQuestionId : "",
     view === "dsa" ? currentDsaPrompt?.id : "",
+    view === "cheatsheet" ? cheatsheetSubject : "",
   ].join("|");
 
   useEffect(() => {
@@ -1038,8 +1044,11 @@ export function App() {
     setView("lesson");
   }
 
-  function startPractice(subject) {
-    const subjectSet = composeSubjectPracticeSet(subject, appState.conceptState);
+  function startPractice(subject, conceptFilter = null) {
+    let subjectSet = composeSubjectPracticeSet(subject, appState.conceptState);
+    if (conceptFilter) {
+      subjectSet = subjectSet.filter((question) => question.concept === conceptFilter);
+    }
     const attemptsToday = appState.attempts.filter(
       (attempt) => attempt.date === dateKey() && attempt.source === "practice",
     );
@@ -1173,7 +1182,15 @@ export function App() {
 
   function exitPractice() {
     setPracticeSubject(null);
-    setView("practice-setup");
+    setPracticeSet([]);
+    setPracticeIndex(0);
+    setPracticeSelectedIndex(null);
+    setPracticeCardSide("front");
+    if (cheatsheetSubject) {
+      setView("cheatsheet");
+    } else {
+      setView("practice-setup");
+    }
   }
 
   function completeCourseSetup(selectedCourses, dailyGoal = appState.settings.dailyGoal) {
@@ -1245,7 +1262,25 @@ export function App() {
       return;
     }
     if (view === "practice-summary") {
+      if (cheatsheetSubject) {
+        setView("cheatsheet");
+      } else {
+        setView("practice-setup");
+      }
+      return;
+    }
+    if (view === "cheatsheet") {
+      setCheatsheetSubject(null);
       setView("practice-setup");
+      return;
+    }
+    if (view === "dsa") {
+      if (activeDsaPromptOverride) {
+        setActiveDsaPromptOverride(null);
+        setView("cheatsheet");
+        return;
+      }
+      setView("today");
       return;
     }
     if (view === "interview-question" || view === "interview-lab") {
@@ -1459,7 +1494,8 @@ export function App() {
             attempts={todayDsaAttempts}
             recordDsaAttempt={recordDsaAttempt}
             goToday={() => setView("today")}
-            goProgress={() => setView("progress")}
+            goProgress={activeDsaPromptOverride ? () => { setActiveDsaPromptOverride(null); setView("cheatsheet"); } : () => setView("progress")}
+            isPracticeMode={Boolean(activeDsaPromptOverride)}
           />
         )}
 
@@ -1489,7 +1525,54 @@ export function App() {
         )}
 
         {appState.hasCompletedCourseSetup && view === "practice-setup" && (
-          <PracticeSetupView conceptState={appState.conceptState} attempts={appState.attempts} startPractice={startPractice} />
+          <PracticeSetupView
+            conceptState={appState.conceptState}
+            attempts={appState.attempts}
+            dsaAttempts={appState.dsaAttempts}
+            openCheatsheet={(subject) => {
+              setCheatsheetSubject(subject);
+              setView("cheatsheet");
+            }}
+            startPractice={(subject) => {
+              if (subject === "DSA") {
+                const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
+                const unanswered = DSA_PROMPTS.find((p) => !todayDsaAttempts.some((a) => a.promptId === p.id)) || DSA_PROMPTS[0];
+                if (unanswered) {
+                  setActiveDsaPromptOverride(unanswered);
+                  setView("dsa");
+                }
+              } else {
+                startPractice(subject);
+              }
+            }}
+          />
+        )}
+
+        {appState.hasCompletedCourseSetup && view === "cheatsheet" && (
+          <CheatsheetView
+            subject={cheatsheetSubject}
+            attempts={appState.attempts}
+            dsaAttempts={appState.dsaAttempts}
+            startPractice={(subject, conceptFilter) => {
+              if (subject === "DSA") {
+                const todayDsaAttempts = appState.dsaAttempts.filter((attempt) => attempt.date === dateKey());
+                const matching = conceptFilter
+                  ? DSA_PROMPTS.filter((p) => p.concept === conceptFilter)
+                  : DSA_PROMPTS;
+                const unanswered = matching.find((p) => !todayDsaAttempts.some((a) => a.promptId === p.id)) || matching[0];
+                if (unanswered) {
+                  setActiveDsaPromptOverride(unanswered);
+                  setView("dsa");
+                }
+              } else {
+                startPractice(subject, conceptFilter);
+              }
+            }}
+            openDsaPrompt={(prompt) => {
+              setActiveDsaPromptOverride(prompt);
+              setView("dsa");
+            }}
+          />
         )}
 
         {appState.hasCompletedCourseSetup && view === "practice" && (
@@ -1514,8 +1597,17 @@ export function App() {
             subject={practiceSubject}
             practiceSet={practiceSet}
             attempts={practiceAttemptsToday}
-            goPracticeSetup={() => setView("practice-setup")}
-            goToday={() => setView("today")}
+            goPracticeSetup={() => {
+              if (cheatsheetSubject) {
+                setView("cheatsheet");
+              } else {
+                setView("practice-setup");
+              }
+            }}
+            goToday={() => {
+              setCheatsheetSubject(null);
+              setView("today");
+            }}
           />
         )}
 
@@ -1546,12 +1638,6 @@ export function App() {
             streak={appState.streak}
             accuracy={accuracy}
             selectedCourses={appState.settings.selectedCourses}
-          />
-        )}
-
-        {appState.hasCompletedCourseSetup && view === "settings" && (
-          <SettingsView
-            settings={appState.settings}
             currentSyncId={currentSyncId}
             syncIdInput={syncIdInput}
             syncIdActionMessage={syncIdActionMessage}
@@ -1560,13 +1646,7 @@ export function App() {
             setSyncIdInput={setSyncIdInput}
             copyCurrentSyncId={copyCurrentSyncId}
             loadProgressBySyncId={loadProgressBySyncId}
-            updateGoal={updateGoal}
-            toggleSubject={toggleSubject}
-            toggleCourse={toggleCourse}
-            updatePreference={updatePreference}
             regenerateSet={regenerateSet}
-            openCourseSetup={openCourseSetup}
-            exportSnapshot={appState}
           />
         )}
 
@@ -1622,7 +1702,6 @@ function FrameTop({
     ...(dsaEnabled ? [{ id: "dsa", label: "DSA", icon: Code2 }] : []),
     { id: "practice-setup", label: "Practice", icon: BookOpen },
     { id: "progress", label: "Progress", icon: BarChart3 },
-    { id: "settings", label: "Settings", icon: Settings },
   ];
   const mobileNavItems = baseNavItems;
 
@@ -1632,7 +1711,7 @@ function FrameTop({
       const isActive =
         (view === item.id) ||
         (item.id === "today" && (view === "question" || view === "summary" || view === "interview-lab" || view === "interview-question" || view === "interactive-list" || view === "interactive-play" || (view === "lesson" && lessonOrigin === "question"))) ||
-        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || (view === "lesson" && lessonOrigin === "practice")));
+        (item.id === "practice-setup" && (view === "practice" || view === "practice-summary" || view === "cheatsheet" || (view === "lesson" && lessonOrigin === "practice")));
       return (
         <button
           key={item.id}
@@ -2311,7 +2390,7 @@ function QuestionView({
   );
 }
 
-function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
+function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress, isPracticeMode = false }) {
   const [draft, setDraft] = useState("");
   const [revealed, setRevealed] = useState(false);
   const [rated, setRated] = useState(null);
@@ -2595,7 +2674,7 @@ function DsaView({ prompt, attempts, recordDsaAttempt, goToday, goProgress }) {
           </button>
           {alreadyRated || rated ? (
             <button className="primary-button" onClick={goProgress}>
-              View progress
+              {isPracticeMode ? "Back to cheatsheet" : "View progress"}
               <ChevronRight size={16} aria-hidden="true" />
             </button>
           ) : null}
@@ -2785,10 +2864,17 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
   );
 }
 
-function PracticeSetupView({ conceptState, attempts, startPractice }) {
-  const subjectCards = SUBJECTS.map((subject) => {
+function PracticeSetupView({ conceptState, attempts, dsaAttempts = [], openCheatsheet, startPractice }) {
+  const PRACTICE_SUBJECTS = ["DBMS", "OS", "CN", "OOP", "CPP", "PYTHON", "OA", "DSA"];
+
+  const subjectCards = PRACTICE_SUBJECTS.map((subject) => {
     const meta = SUBJECT_META[subject];
-    const coverage = subjectQuestionCoverage(subject, attempts);
+    let coverage = { completed: 0, total: 0 };
+    if (subject === "DSA") {
+      coverage = dsaCoverage(dsaAttempts);
+    } else {
+      coverage = subjectQuestionCoverage(subject, attempts);
+    }
     const coveragePercent = coverage.total
       ? Math.round((coverage.completed / coverage.total) * 100)
       : 0;
@@ -2800,11 +2886,11 @@ function PracticeSetupView({ conceptState, attempts, startPractice }) {
       <header className="screen-header">
         <p className="eyebrow">Practice by topic</p>
         <h1>Pick a course to drill.</h1>
-        <p className="screen-subtitle">Run through every question in one subject, outside the daily set.</p>
+        <p className="screen-subtitle">Select a subject to read its cheatsheet or start practice questions directly.</p>
       </header>
       <div className="practice-subject-grid">
         {subjectCards.map(({ subject, meta, coveragePercent, coverage }) => (
-          <button key={subject} className="practice-subject-card" onClick={() => startPractice(subject)}>
+          <div key={subject} className="practice-subject-card" onClick={() => openCheatsheet(subject)}>
             <div className="practice-subject-card-top">
               <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
                 {meta.name}
@@ -2812,19 +2898,224 @@ function PracticeSetupView({ conceptState, attempts, startPractice }) {
               <span className="practice-subject-mastery">{coveragePercent}%</span>
             </div>
             <p className="practice-subject-detail">{meta.detail}</p>
-            <div className="coverage-row">
+            <div className="coverage-row" style={{ marginBottom: "4px" }}>
               <div className="coverage-bar">
                 <span
                   className="coverage-bar-fill"
-                  style={{ width: `${coveragePercent}%` }}
+                  style={{ width: `${coveragePercent}%`, backgroundColor: meta.accent }}
                 />
               </div>
               <span className="coverage-label">
-                {coverage.completed}/{coverage.total} questions covered
+                {coverage.completed}/{coverage.total} {subject === "DSA" ? "prompts" : "questions"} covered
               </span>
             </div>
-          </button>
+            <div className="practice-card-actions">
+              <button
+                className="ghost-button small-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openCheatsheet(subject);
+                }}
+              >
+                Cheatsheet
+              </button>
+              <button
+                className="primary-button small-action"
+                style={{ backgroundColor: meta.accent, borderColor: meta.accent }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startPractice(subject);
+                }}
+              >
+                Practice
+              </button>
+            </div>
+          </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function CheatsheetView({ subject, attempts, dsaAttempts = [], startPractice, openDsaPrompt }) {
+  const meta = SUBJECT_META[subject] || { name: subject, accent: "#7b7168" };
+  const cheatsheetData = CHEATSHEETS[subject] || [];
+
+  let coverage = { completed: 0, total: 0 };
+  if (subject === "DSA") {
+    coverage = dsaCoverage(dsaAttempts);
+  } else {
+    coverage = subjectQuestionCoverage(subject, attempts);
+  }
+  const coveragePercent = coverage.total ? Math.round((coverage.completed / coverage.total) * 100) : 0;
+
+  const [expandedTopic, setExpandedTopic] = useState(null);
+  const [displayMode, setDisplayMode] = useState("reader"); // "reader" or "board"
+  const [activeTopicIndex, setActiveTopicIndex] = useState(0);
+
+  const toggleTopic = (topicName) => {
+    setExpandedTopic(expandedTopic === topicName ? null : topicName);
+  };
+
+  const activeTopic = cheatsheetData[activeTopicIndex] || cheatsheetData[0];
+
+  return (
+    <div className="screen cheatsheet-screen view-enter">
+      <div className="cheatsheet-header-row">
+        <div className="cheatsheet-header">
+          <span className="pill neutral" style={{ borderColor: meta.accent, color: meta.accent }}>
+            {meta.name}
+          </span>
+          <h1>{meta.name} Cheatsheet</h1>
+          <p className="cheatsheet-subtitle">{meta.detail}</p>
+        </div>
+
+        {cheatsheetData.length > 0 && (
+          <div className="cheatsheet-mode-toggle">
+            <button
+              className={classNames("toggle-btn", displayMode === "reader" && "active")}
+              onClick={() => setDisplayMode("reader")}
+              title="Reader View (Split Pane)"
+            >
+              <Columns size={14} aria-hidden="true" />
+              <span>Reader View</span>
+            </button>
+            <button
+              className={classNames("toggle-btn", displayMode === "board" && "active")}
+              onClick={() => setDisplayMode("board")}
+              title="Board View (Grid)"
+            >
+              <LayoutGrid size={14} aria-hidden="true" />
+              <span>Board View</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="cheatsheet-practice-card" style={{ borderColor: meta.accent + "33" }}>
+        <div className="practice-card-info">
+          <h2>Subject Practice</h2>
+          <p>Test your knowledge with practice questions for the entire subject.</p>
+          <div className="coverage-row">
+            <div className="coverage-bar">
+              <span className="coverage-bar-fill" style={{ width: `${coveragePercent}%`, backgroundColor: meta.accent }} />
+            </div>
+            <span className="coverage-label">
+              {coverage.completed}/{coverage.total} {subject === "DSA" ? "prompts" : "questions"} covered
+            </span>
+          </div>
+        </div>
+        <button className="primary-button" style={{ backgroundColor: meta.accent }} onClick={() => startPractice(subject)}>
+          Start Practice
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="cheatsheet-content-container">
+        {cheatsheetData.length === 0 ? (
+          <p className="no-topics">No cheatsheet data available for this subject.</p>
+        ) : (
+          <>
+            {/* Mobile Accordion View (Hidden on desktop) */}
+            <div className="cheatsheet-mobile-accordion">
+              <div className="topics-accordion">
+                {cheatsheetData.map((t) => {
+                  const isExpanded = expandedTopic === t.topic;
+
+                  return (
+                    <div key={t.topic} className={classNames("cheatsheet-topic-item", isExpanded && "expanded")}>
+                      <button className="topic-trigger" onClick={() => toggleTopic(t.topic)}>
+                        <span className="topic-title">{t.topic}</span>
+                        <div className="topic-trigger-right">
+                          <span className="arrow-icon">{isExpanded ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="topic-content view-enter">
+                          <p className="topic-brief">{t.brief}</p>
+                          {t.subtopics && t.subtopics.length > 0 && (
+                            <div className="subtopics-list">
+                              {t.subtopics.map((sub, sIdx) => (
+                                <div key={sIdx} className="subtopic-card">
+                                  <span className="subtopic-name">{sub.name}</span>
+                                  <p className="subtopic-explanation">{sub.explanation}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Desktop Views (Hidden on mobile) */}
+            <div className="cheatsheet-desktop-content">
+              {displayMode === "reader" ? (
+                /* Reader View: Split Pane */
+                <div className="cheatsheet-split-layout">
+                  <aside className="cheatsheet-sidebar">
+                    <p className="sidebar-title">Topics</p>
+                    <nav className="sidebar-nav">
+                      {cheatsheetData.map((t, idx) => (
+                        <button
+                          key={t.topic}
+                          className={classNames("sidebar-item", activeTopicIndex === idx && "active")}
+                          style={activeTopicIndex === idx ? { borderLeftColor: meta.accent, color: meta.accent, fontWeight: "700" } : {}}
+                          onClick={() => setActiveTopicIndex(idx)}
+                        >
+                          {t.topic}
+                        </button>
+                      ))}
+                    </nav>
+                  </aside>
+
+                  <main className="cheatsheet-reader-panel view-enter" key={activeTopic?.topic}>
+                    <h2 className="reader-topic-title">{activeTopic?.topic}</h2>
+                    <p className="reader-topic-brief">{activeTopic?.brief}</p>
+                    {activeTopic?.subtopics && activeTopic.subtopics.length > 0 && (
+                      <div className="reader-subtopics-section">
+                        <h3>Subtopics</h3>
+                        <div className="reader-subtopics-grid">
+                          {activeTopic.subtopics.map((sub, sIdx) => (
+                            <div key={sIdx} className="reader-subtopic-card">
+                              <span className="subtopic-name">{sub.name}</span>
+                              <p className="subtopic-explanation">{sub.explanation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </main>
+                </div>
+              ) : (
+                /* Board View: Grid Board */
+                <div className="cheatsheet-grid-board">
+                  {cheatsheetData.map((t) => (
+                    <div key={t.topic} className="board-topic-card">
+                      <h3 className="board-topic-title" style={{ borderLeftColor: meta.accent }}>
+                        {t.topic}
+                      </h3>
+                      <p className="board-topic-brief">{t.brief}</p>
+                      {t.subtopics && t.subtopics.length > 0 && (
+                        <div className="board-subtopics-list">
+                          {t.subtopics.map((sub, sIdx) => (
+                            <div key={sIdx} className="board-subtopic-item">
+                              <span className="subtopic-name">{sub.name}</span>
+                              <p className="subtopic-explanation">{sub.explanation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2854,8 +3145,24 @@ function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, 
   );
 }
 
-function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, selectedCourses }) {
-  const activeSubjects = selectedCourses.filter((course) => SUBJECTS.includes(course));
+function ProgressView({
+  conceptState,
+  attempts,
+  dsaAttempts,
+  streak,
+  accuracy,
+  selectedCourses,
+  currentSyncId,
+  syncIdInput,
+  syncIdActionMessage,
+  syncStatus,
+  syncMessage,
+  setSyncIdInput,
+  copyCurrentSyncId,
+  loadProgressBySyncId,
+  regenerateSet,
+}) {
+  const activeSubjects = selectedCourses.filter((subject) => SUBJECTS.includes(subject));
   const subjectRows = activeSubjects.map((subject) => {
     const concepts = uniqueMcqConceptsForSubject(subject);
     const mastery = Math.round(
@@ -2991,234 +3298,98 @@ function ProgressView({ conceptState, attempts, dsaAttempts, streak, accuracy, s
           <p className="eyebrow">Streak history</p>
           <div className="calendar-strip">
             {streak.history.slice(-14).map((day) => (
-              <span key={day.date} className={classNames("calendar-day", day.completed && "done")}>
+                              <span key={day.date} className={classNames("calendar-day", day.completed && "done")}>
                 {new Date(`${day.date}T00:00:00`).getDate()}
               </span>
             ))}
           </div>
         </div>
       </section>
-    </div>
-  );
-}
 
-function SettingsView({
-  settings,
-  currentSyncId,
-  syncIdInput,
-  syncIdActionMessage,
-  syncStatus,
-  syncMessage,
-  setSyncIdInput,
-  copyCurrentSyncId,
-  loadProgressBySyncId,
-  updateGoal,
-  toggleSubject,
-  toggleCourse,
-  updatePreference,
-  regenerateSet,
-  openCourseSetup,
-  exportSnapshot,
-}) {
-  const [exportStatus, setExportStatus] = useState("idle");
-
-  async function handleExport() {
-    const json = JSON.stringify(exportSnapshot, null, 2);
-    try {
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `crackit-progress-${dateKey()}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setExportStatus("done");
-    } catch {
-      try {
-        await navigator.clipboard.writeText(json);
-        setExportStatus("copied");
-      } catch {
-        setExportStatus("error");
-      }
-    }
-    setTimeout(() => setExportStatus("idle"), 2200);
-  }
-
-  const exportLabel =
-    exportStatus === "done"
-      ? "Saved progress file"
-      : exportStatus === "copied"
-        ? "Copied to clipboard"
-        : exportStatus === "error"
-          ? "Export failed - try again"
-          : "Export progress data";
-
-  return (
-    <div className="screen settings-screen view-enter">
-      <section className="page-heading">
-        <p className="eyebrow">Settings</p>
-        <h1>Daily loop</h1>
-      </section>
-      <section className="settings-layout">
-        <div className="settings-panel primary-settings">
-          <div className="setting-section">
-            <div className="section-heading">
-              <p className="eyebrow">Daily goal</p>
-              <span>~{Math.max(8, settings.dailyGoal * 2)} min</span>
+      <section className="progress-settings-section">
+        {/* Progress Sync Card */}
+        <div className={classNames("setting-feature-card sync-card", syncStatus)}>
+          <div className="sync-card-layout">
+            <div className="sync-card-header">
+              <div>
+                <p className="eyebrow">Progress sync</p>
+                <strong style={{ display: "block", marginTop: "4px" }}>
+                  {syncStatus === "synced"
+                    ? "Synced"
+                    : syncStatus === "syncing"
+                      ? "Syncing"
+                      : syncStatus === "checking"
+                        ? "Checking"
+                        : syncStatus === "offline"
+                          ? "Offline"
+                          : "Local only"}
+                </strong>
+                <small className="sync-status-message">{syncMessage}</small>
+              </div>
+              <div className="sync-id-display">
+                <span className="sync-id-label">Device Sync ID</span>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "4px" }}>
+                  <code className="sync-id-code">{currentSyncId}</code>
+                  <button
+                    type="button"
+                    className="copy-sync-button"
+                    onClick={copyCurrentSyncId}
+                  >
+                    <Copy size={13} aria-hidden="true" />
+                    <span>Copy ID</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="goal-number compact">
-              <span>{settings.dailyGoal}</span>
-              <small>questions/day</small>
-            </div>
-            <div className="stepper">
-              <button
-                className="icon-button"
-                onClick={() => updateGoal(Math.max(3, settings.dailyGoal - 1))}
-                aria-label="Decrease daily goal"
+
+            <div className="sync-card-divider" />
+
+            <div className="sync-card-actions">
+              <form
+                className="sync-load-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  loadProgressBySyncId();
+                }}
               >
-                -
-              </button>
-              <input
-                type="range"
-                min="3"
-                max="10"
-                value={settings.dailyGoal}
-                onChange={(event) => updateGoal(event.target.value)}
-                aria-label="Daily goal"
-              />
-              <button
-                className="icon-button"
-                onClick={() => updateGoal(Math.min(10, settings.dailyGoal + 1))}
-                aria-label="Increase daily goal"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div className="setting-section">
-            <div className="section-heading">
-              <p className="eyebrow">Active subjects</p>
-              <button className="text-button" onClick={openCourseSetup}>Full setup</button>
-            </div>
-            <div className="subject-toggles">
-              {COURSE_OPTIONS.map((course) => (
-                <button
-                  key={course.id}
-                  className={classNames("toggle-chip", settings.selectedCourses.includes(course.id) && "enabled")}
-                  style={{ "--chip-accent": SUBJECT_META[course.id].accent }}
-                  onClick={() => course.type === "mcq" ? toggleSubject(course.id) : toggleCourse(course.id)}
-                >
-                  {settings.selectedCourses.includes(course.id) ? <Check size={15} /> : <X size={15} />}
-                  {course.id}
-                </button>
-              ))}
+                <div className="sync-input-wrapper">
+                  <label htmlFor="sync-id-field" className="sync-input-label">
+                    Load progress from another device
+                  </label>
+                  <div className="sync-input-row">
+                    <input
+                      id="sync-id-field"
+                      type="text"
+                      inputMode="text"
+                      value={syncIdInput}
+                      onChange={(event) => setSyncIdInput(event.target.value)}
+                      placeholder="Enter another Sync ID"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck="false"
+                    />
+                    <button type="submit" className="primary-button small-action sync-submit-btn">
+                      <LogIn size={14} aria-hidden="true" />
+                      <span>Link Device</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+              {syncIdActionMessage && (
+                <p className="sync-action-feedback">{syncIdActionMessage}</p>
+              )}
             </div>
           </div>
         </div>
 
-        <aside className="settings-panel settings-cards">
-          <div className={classNames("setting-feature-card sync-card", syncStatus)}>
-            <span>
-              <p className="eyebrow">Progress sync</p>
-              <strong>
-                {syncStatus === "synced"
-                  ? "Synced"
-                  : syncStatus === "syncing"
-                    ? "Syncing"
-                    : syncStatus === "checking"
-                      ? "Checking"
-                      : syncStatus === "offline"
-                        ? "Offline"
-                        : "Local only"}
-              </strong>
-              <small>{syncMessage}</small>
-              <code className="sync-id-pill">{currentSyncId}</code>
-              <div className="sync-actions">
-                <button type="button" className="small-icon-button" onClick={copyCurrentSyncId} aria-label="Copy sync ID">
-                  <Copy size={15} aria-hidden="true" />
-                </button>
-                <form
-                  className="sync-id-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    loadProgressBySyncId();
-                  }}
-                >
-                  <input
-                    type="text"
-                    inputMode="text"
-                    value={syncIdInput}
-                    onChange={(event) => setSyncIdInput(event.target.value)}
-                    onPaste={(event) => {
-                      const pastedSyncId = event.clipboardData?.getData("text");
-                      if (!pastedSyncId) return;
-                      event.preventDefault();
-                      setSyncIdInput(normalizeProgressSyncId(pastedSyncId));
-                    }}
-                    placeholder="Enter sync ID"
-                    aria-label="Sync ID to load"
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck="false"
-                  />
-                  <button type="submit" className="small-icon-button" aria-label="Load progress by sync ID">
-                    <LogIn size={15} aria-hidden="true" />
-                  </button>
-                </form>
-              </div>
-              {syncIdActionMessage && <small className="sync-action-message">{syncIdActionMessage}</small>}
-            </span>
-          </div>
-
-          <button
-            className={classNames("setting-feature-card dark", settings.interviewMode && "enabled")}
-            onClick={() => updatePreference("interviewMode", !settings.interviewMode)}
-          >
-            <span>
-              <p className="eyebrow">Interview mode</p>
-              <strong>{settings.interviewMode ? "Timed practice" : "Open practice"}</strong>
-              <small>Timer, no hints, placement pressure.</small>
-            </span>
-            <span className="toggle-switch" aria-hidden="true" />
-          </button>
-
-          <button
-            className={classNames("setting-feature-card", settings.remindersEnabled && "enabled")}
-            onClick={() => updatePreference("remindersEnabled", !settings.remindersEnabled)}
-          >
-            <span>
-              <p className="eyebrow">Daily nudge</p>
-              <strong>{settings.reminderTime}</strong>
-              <small>Keep the habit warm.</small>
-            </span>
-            <Bell size={20} aria-hidden="true" />
-          </button>
-
-          <button className="setting-feature-card danger" onClick={regenerateSet}>
-            <span>
-              <p className="eyebrow">Today</p>
-              <strong>Rebuild set</strong>
-              <small>Use due reviews and weak areas.</small>
-            </span>
-            <RotateCcw size={20} aria-hidden="true" />
-          </button>
-
-          <button
-            className={classNames("setting-feature-card", exportStatus !== "idle" && "enabled")}
-            type="button"
-            onClick={handleExport}
-          >
-            <span>
-              <p className="eyebrow">Account</p>
-              <strong>{exportLabel}</strong>
-              <small>Local progress snapshot.</small>
-            </span>
-            <Download size={20} aria-hidden="true" />
-          </button>
-        </aside>
+        <button className="setting-feature-card danger rebuild-card" onClick={regenerateSet}>
+          <span>
+            <p className="eyebrow">Today</p>
+            <strong>Rebuild set</strong>
+            <small>Recreate your daily practice queue.</small>
+          </span>
+          <RotateCcw size={20} aria-hidden="true" />
+        </button>
       </section>
     </div>
   );
