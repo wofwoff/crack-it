@@ -10,12 +10,13 @@ Built as a single-page React app, it is packaged with **Capacitor** for iOS and 
 
 Here is a visual overview of CrackIt's user experience (optimized for mobile and iOS layouts):
 
-### Core App Screens (Dashboard, MCQ Explanation, DSA Drills)
+### Core App Screens (Home, Question, Answer)
 <p align="center">
-  <img src="product-audit-2026-06-25/02-today-dashboard-mobile.png" width="30%" alt="Today Dashboard" />
-  <img src="product-audit-2026-06-25/05-mcq-explanation-mobile.png" width="30%" alt="MCQ Explanation & Lesson" />
-  <img src="product-audit-2026-06-25/08-dsa-prompt-mobile.png" width="30%" alt="DSA Prompt" />
+  <img src="product-audit-2026-06-25/02-today-dashboard-mobile.png" width="30%" alt="Home Page" />
+  <img src="product-audit-2026-06-25/03-mcq-question-mobile.png" width="30%" alt="Question Page" />
+  <img src="product-audit-2026-06-25/04-mcq-answer-feedback-mobile.png" width="30%" alt="Answer Page" />
 </p>
+
 
 
 ---
