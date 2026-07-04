@@ -10,19 +10,13 @@ Built as a single-page React app, it is packaged with **Capacitor** for iOS and 
 
 Here is a visual overview of CrackIt's user experience (optimized for mobile and iOS layouts):
 
-### 1. Dashboard, MCQ Player & Spaced-Repetition Explanation
+### Core App Screens (Dashboard, MCQ Explanation, DSA Drills)
 <p align="center">
   <img src="product-audit-2026-06-25/02-today-dashboard-mobile.png" width="30%" alt="Today Dashboard" />
-  <img src="product-audit-2026-06-25/03-mcq-question-mobile.png" width="30%" alt="MCQ Player" />
-  <img src="product-audit-2026-06-25/05-mcq-explanation-mobile.png" width="30%" alt="Answer Feedback & Explanation" />
+  <img src="product-audit-2026-06-25/05-mcq-explanation-mobile.png" width="30%" alt="MCQ Explanation & Lesson" />
+  <img src="product-audit-2026-06-25/08-dsa-prompt-mobile.png" width="30%" alt="DSA Prompt" />
 </p>
 
-### 2. DSA Reasoning Drills, Progress Stats & Sync Settings
-<p align="center">
-  <img src="product-audit-2026-06-25/08-dsa-prompt-mobile.png" width="30%" alt="DSA Challenge Prompt" />
-  <img src="product-audit-2026-06-25/10-progress-mobile.png" width="30%" alt="Concept Mastery Progress" />
-  <img src="product-audit-2026-06-25/11-settings-mobile.png" width="30%" alt="Settings & Cross-Device Sync" />
-</p>
 
 ---
 
