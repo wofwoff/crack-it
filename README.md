@@ -12,9 +12,9 @@ Here is a visual overview of CrackIt's user experience (optimized for mobile and
 
 ### Core App Screens (Home, Question, Answer)
 <p align="center">
-  <img src="product-audit-2026-06-25/02-today-dashboard-mobile.png" width="30%" alt="Home Page" />
-  <img src="product-audit-2026-06-25/03-mcq-question-mobile.png" width="30%" alt="Question Page" />
-  <img src="product-audit-2026-06-25/04-mcq-answer-feedback-mobile.png" width="30%" alt="Answer Page" />
+  <img src="screenshots/home.png" width="30%" alt="Home Page" />
+  <img src="screenshots/question.png" width="30%" alt="Question Page" />
+  <img src="screenshots/answer.png" width="30%" alt="Answer Page" />
 </p>
 
 
