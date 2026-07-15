@@ -4,38 +4,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Circular Seating Arrangement",
     difficulty: "hard",
-    stem:
-      "Six people A, B, C, D, E, and F sit around a circular table, all facing the center, evenly spaced. A sits directly opposite D. B sits immediately clockwise of A. C sits immediately clockwise of B. E sits immediately counter-clockwise of A. F is the only person left, and sits between D and E. Who sits immediately counter-clockwise of D (that is, to D's immediate left, since D faces the center)?",
+    stem: "Six people A, B, C, D, E, and F sit around a circular table, all facing the center, evenly spaced. A sits directly opposite D. B sits immediately clockwise of A. C sits immediately clockwise of B. E sits immediately counter-clockwise of A. F is the only person left, and sits between D and E. Who sits immediately counter-clockwise of D (that is, to D's immediate left, since D faces the center)?",
     options: [
+      {
+        text: "F",
+        sub: "Confuses F's position with D's other neighbor",
+        fix: "F sits between D and E, which makes F the clockwise neighbor of D, not the counter-clockwise one.",
+      },
+      {
+        text: "B",
+        sub: "Skips two seats from A instead of locating D's actual neighbor",
+        fix: "B is only immediately clockwise of A, two seats away from D in this arrangement, not adjacent to D at all.",
+      },
       {
         text: "C",
         sub: "Builds the full clockwise order from the fixed anchors",
         fix: "",
       },
       {
-        text: "F",
-        sub: "Confuses F's position with D's other neighbor",
-        fix:
-          "F sits between D and E, which makes F the clockwise neighbor of D, not the counter-clockwise one.",
-      },
-      {
-        text: "B",
-        sub: "Skips two seats from A instead of locating D's actual neighbor",
-        fix:
-          "B is only immediately clockwise of A, two seats away from D in this arrangement, not adjacent to D at all.",
-      },
-      {
         text: "A",
         sub: "Treats opposite as adjacent",
-        fix:
-          "A is directly opposite D across the table in a 6-seat circle, which means 3 seats apart, not next to D.",
+        fix: "A is directly opposite D across the table in a 6-seat circle, which means 3 seats apart, not next to D.",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For circular arrangements, fix one person's position arbitrarily, place every other person using clockwise/counter-clockwise distances from that anchor, and only then read off the final order — don't reason about 'left' and 'right' relative to each person individually.",
-    lesson:
-      "Place A at clockwise position 1. With 6 evenly spaced seats, 'opposite' means 3 seats away, so D is at position 4. B is immediately clockwise of A, so B is at position 2; C is immediately clockwise of B, so C is at position 3. E is immediately counter-clockwise of A, so E is at position 6. The only remaining seat, position 5, goes to F, which sits between D (4) and E (6), matching the clue. The clockwise order is A, B, C, D, F, E. D's counter-clockwise (immediate left) neighbor is the seat just before D in the clockwise order, which is C.",
+    correctIndex: 2,
+    proTip: "For circular arrangements, fix one person's position arbitrarily, place every other person using clockwise/counter-clockwise distances from that anchor, and only then read off the final order — don't reason about 'left' and 'right' relative to each person individually.",
+    lesson: "Place A at clockwise position 1. With 6 evenly spaced seats, 'opposite' means 3 seats away, so D is at position 4. B is immediately clockwise of A, so B is at position 2; C is immediately clockwise of B, so C is at position 3. E is immediately counter-clockwise of A, so E is at position 6. The only remaining seat, position 5, goes to F, which sits between D (4) and E (6), matching the clue. The clockwise order is A, B, C, D, F, E. D's counter-clockwise (immediate left) neighbor is the seat just before D in the clockwise order, which is C.",
     remember: "In circular seating, fix one person as an anchor, convert every clue into a clockwise-step distance from that anchor, and build the whole ring before answering — 'opposite' means half the total seats away, not adjacent.",
     interviewAnswer: "I fixed A at a reference seat and built the rest of the circle using clockwise steps: B right after A, C right after B, and E one step counter-clockwise of A. Since A and D are opposite in a 6-seat circle, D had to be exactly 3 seats from A, which left only one seat for F, fitting neatly between D and E. Once the full ring reads A, B, C, D, F, E clockwise, D's immediate counter-clockwise neighbor — the seat just before D — is clearly C.",
   },
@@ -44,38 +38,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Age Puzzle",
     difficulty: "medium",
-    stem:
-      "Sita is currently 4 years older than her brother Ravi. Five years ago, Sita's age was exactly three times Ravi's age at that time. What is Ravi's current age?",
+    stem: "Sita is currently 4 years older than her brother Ravi. Five years ago, Sita's age was exactly three times Ravi's age at that time. What is Ravi's current age?",
     options: [
+      {
+        text: "9 years",
+        sub: "Uses the age difference as today's ratio instead of five years ago",
+        fix: "This applies the 'three times' condition to current ages rather than the ages five years ago, which is not what the stem states.",
+      },
+      {
+        text: "11 years",
+        sub: "Forgets to subtract 5 from Sita's age in the equation",
+        fix: "This uses Sita's current age instead of her age five years ago on the left side of the equation, breaking the 'five years ago' condition.",
+      },
       {
         text: "7 years",
         sub: "Solves the linear equation from five years ago",
         fix: "",
       },
       {
-        text: "9 years",
-        sub: "Uses the age difference as today's ratio instead of five years ago",
-        fix:
-          "This applies the 'three times' condition to current ages rather than the ages five years ago, which is not what the stem states.",
-      },
-      {
         text: "5 years",
         sub: "Sets up the equation using ages five years from now",
-        fix:
-          "This treats the five-year shift as moving forward in time instead of backward, flipping the direction of the condition given in the stem.",
-      },
-      {
-        text: "11 years",
-        sub: "Forgets to subtract 5 from Sita's age in the equation",
-        fix:
-          "This uses Sita's current age instead of her age five years ago on the left side of the equation, breaking the 'five years ago' condition.",
+        fix: "This treats the five-year shift as moving forward in time instead of backward, flipping the direction of the condition given in the stem.",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For age puzzles, define one variable for the present age of one person, express everyone else in terms of it, then carefully shift every age by the same number of years before applying any 'times' relationship.",
-    lesson:
-      "Let Ravi's current age be R, so Sita's current age is R + 4. Five years ago, Ravi was R − 5 and Sita was R − 1. The condition states (R − 1) = 3(R − 5), which gives R − 1 = 3R − 15, so 14 = 2R and R = 7. Checking: Ravi is 7 now (was 2 five years ago), Sita is 11 now (was 6 five years ago), and 6 is indeed three times 2.",
+    correctIndex: 2,
+    proTip: "For age puzzles, define one variable for the present age of one person, express everyone else in terms of it, then carefully shift every age by the same number of years before applying any 'times' relationship.",
+    lesson: "Let Ravi's current age be R, so Sita's current age is R + 4. Five years ago, Ravi was R − 5 and Sita was R − 1. The condition states (R − 1) = 3(R − 5), which gives R − 1 = 3R − 15, so 14 = 2R and R = 7. Checking: Ravi is 7 now (was 2 five years ago), Sita is 11 now (was 6 five years ago), and 6 is indeed three times 2.",
     remember: "In age puzzles, always shift every person's age by the same number of years before applying a ratio or multiple condition — never mix a present-day age with a past-tense ratio.",
     interviewAnswer: "I set Ravi's current age as R, which makes Sita's current age R plus 4, and then shifted both back five years to get R minus 5 for Ravi and R minus 1 for Sita. Since Sita's age then was three times Ravi's age then, I wrote R minus 1 equals 3 times R minus 5, which solves to R equals 7. Checking it back: five years ago Ravi was 2 and Sita was 6, and 6 is exactly three times 2, so Ravi is 7 today.",
   },
@@ -84,8 +72,7 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Mixture & Alligation",
     difficulty: "medium",
-    stem:
-      "A shopkeeper mixes two varieties of rice costing ₹40/kg and ₹60/kg to produce a mixture that costs ₹52/kg. What is the ratio of the cheaper rice to the costlier rice in the mixture?",
+    stem: "A shopkeeper mixes two varieties of rice costing ₹40/kg and ₹60/kg to produce a mixture that costs ₹52/kg. What is the ratio of the cheaper rice to the costlier rice in the mixture?",
     options: [
       {
         text: "2 : 3",
@@ -93,29 +80,24 @@ export const NEW_OA = [
         fix: "",
       },
       {
-        text: "3 : 2",
-        sub: "Inverts which difference belongs to which variety",
-        fix:
-          "This swaps the two differences: the cheaper rice's share should come from (costlier price − mean price), not the other way around.",
-      },
-      {
         text: "1 : 1",
         sub: "Assumes the mean price being roughly central implies an equal mix",
-        fix:
-          "₹52 is not equidistant from ₹40 and ₹60 — it's 12 away from 40 and only 8 away from 60, so the mix can't be equal parts.",
+        fix: "₹52 is not equidistant from ₹40 and ₹60 — it's 12 away from 40 and only 8 away from 60, so the mix can't be equal parts.",
       },
       {
         text: "5 : 3",
         sub: "Uses the raw prices instead of their differences from the mean",
-        fix:
-          "This scales 40 and 60 down directly instead of computing how far each price is from the resulting mean price of 52.",
+        fix: "This scales 40 and 60 down directly instead of computing how far each price is from the resulting mean price of 52.",
+      },
+      {
+        text: "3 : 2",
+        sub: "Inverts which difference belongs to which variety",
+        fix: "This swaps the two differences: the cheaper rice's share should come from (costlier price − mean price), not the other way around.",
       },
     ],
     correctIndex: 0,
-    proTip:
-      "In alligation, the ratio of the two ingredients equals (far price − mean) : (mean − near price), cross-matched — the cheaper ingredient's share is proportional to how far the costlier price is from the mean, and vice versa.",
-    lesson:
-      "By the rule of alligation, cheaper : costlier = (cost of costlier − mean price) : (mean price − cost of cheaper) = (60 − 52) : (52 − 40) = 8 : 12, which simplifies to 2 : 3. For every 2 parts of the ₹40 rice, 3 parts of the ₹60 rice are needed to land on a ₹52 average.",
+    proTip: "In alligation, the ratio of the two ingredients equals (far price − mean) : (mean − near price), cross-matched — the cheaper ingredient's share is proportional to how far the costlier price is from the mean, and vice versa.",
+    lesson: "By the rule of alligation, cheaper : costlier = (cost of costlier − mean price) : (mean price − cost of cheaper) = (60 − 52) : (52 − 40) = 8 : 12, which simplifies to 2 : 3. For every 2 parts of the ₹40 rice, 3 parts of the ₹60 rice are needed to land on a ₹52 average.",
     remember: "Alligation ratio = (far price − mean price) : (mean price − near price), cross-assigned to the opposite ingredient — never divide the raw prices directly.",
     interviewAnswer: "I used the alligation rule, which says the ratio of the cheaper to costlier ingredient equals the difference between the costlier price and the mean, compared to the difference between the mean and the cheaper price. That's 60 minus 52, which is 8, to 52 minus 40, which is 12 — giving 8 to 12, or simplified, 2 to 3. So for every 2 parts of the 40-rupee rice you need 3 parts of the 60-rupee rice to average out to 52.",
   },
@@ -124,38 +106,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Time, Speed & Distance (Trains)",
     difficulty: "medium",
-    stem:
-      "Two trains, 120 m and 180 m long, are running on parallel tracks in opposite directions at 54 km/h and 36 km/h respectively. How long do they take to completely cross each other?",
+    stem: "Two trains, 120 m and 180 m long, are running on parallel tracks in opposite directions at 54 km/h and 36 km/h respectively. How long do they take to completely cross each other?",
     options: [
+      {
+        text: "24 seconds",
+        sub: "Uses only one train's speed instead of the relative speed",
+        fix: "This divides the total length by just 36 km/h converted to m/s, ignoring the other train's contribution to closing speed entirely.",
+      },
+      {
+        text: "20 seconds",
+        sub: "Uses the difference of speeds instead of the sum",
+        fix: "Since the trains move in opposite directions, their speeds add for relative speed; subtracting them is only correct when both trains move in the same direction.",
+      },
       {
         text: "12 seconds",
         sub: "Converts relative speed to m/s and divides total length by it",
         fix: "",
       },
       {
-        text: "20 seconds",
-        sub: "Uses the difference of speeds instead of the sum",
-        fix:
-          "Since the trains move in opposite directions, their speeds add for relative speed; subtracting them is only correct when both trains move in the same direction.",
-      },
-      {
         text: "6 seconds",
         sub: "Forgets to add the second train's length to the distance covered",
-        fix:
-          "Completely crossing means covering the sum of both train lengths (300 m), not just one train's length (120 m or 180 m alone).",
-      },
-      {
-        text: "24 seconds",
-        sub: "Uses only one train's speed instead of the relative speed",
-        fix:
-          "This divides the total length by just 36 km/h converted to m/s, ignoring the other train's contribution to closing speed entirely.",
+        fix: "Completely crossing means covering the sum of both train lengths (300 m), not just one train's length (120 m or 180 m alone).",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For two trains crossing each other, relative speed is the sum of their speeds if moving in opposite directions (or the difference if moving the same direction), and the distance to cover is always the sum of both train lengths.",
-    lesson:
-      "Relative speed = 54 + 36 = 90 km/h, since the trains move toward each other. Converting to m/s: 90 × (5/18) = 25 m/s. Total distance to cover for a complete crossing is 120 + 180 = 300 m. Time = 300 / 25 = 12 seconds.",
+    correctIndex: 2,
+    proTip: "For two trains crossing each other, relative speed is the sum of their speeds if moving in opposite directions (or the difference if moving the same direction), and the distance to cover is always the sum of both train lengths.",
+    lesson: "Relative speed = 54 + 36 = 90 km/h, since the trains move toward each other. Converting to m/s: 90 × (5/18) = 25 m/s. Total distance to cover for a complete crossing is 120 + 180 = 300 m. Time = 300 / 25 = 12 seconds.",
     remember: "For crossing-train problems: opposite directions add speeds, same direction subtracts speeds, and the distance is always the sum of both train lengths regardless of direction.",
     interviewAnswer: "Since the trains move toward each other, I added their speeds to get a relative speed of 90 km/h, which converts to 25 meters per second. For them to completely cross, together they need to cover both train lengths combined, 120 plus 180, which is 300 meters. Dividing 300 by 25 gives 12 seconds.",
   },
@@ -164,8 +140,7 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Time and Work",
     difficulty: "medium",
-    stem:
-      "A can complete a task alone in 12 days, and B can complete the same task alone in 15 days. They work together for 4 days, after which A leaves. In how many more days will B alone finish the remaining work?",
+    stem: "A can complete a task alone in 12 days, and B can complete the same task alone in 15 days. They work together for 4 days, after which A leaves. In how many more days will B alone finish the remaining work?",
     options: [
       {
         text: "6 days",
@@ -175,27 +150,22 @@ export const NEW_OA = [
       {
         text: "5 days",
         sub: "Miscalculates the combined work done in 4 days",
-        fix:
-          "This understates the combined 4-day output, leaving more work remaining than B's actual rate would need only 5 days for — the correct combined rate accounts for both 1/12 and 1/15 per day across all 4 days.",
-      },
-      {
-        text: "9 days",
-        sub: "Assumes A contributed nothing during the joint 4 days",
-        fix:
-          "This ignores A's work entirely during the first 4 days and treats the whole task as left for B, rather than only the fraction remaining after both worked together.",
+        fix: "This understates the combined 4-day output, leaving more work remaining than B's actual rate would need only 5 days for — the correct combined rate accounts for both 1/12 and 1/15 per day across all 4 days.",
       },
       {
         text: "3 days",
         sub: "Uses the wrong leftover fraction of work for B",
-        fix:
-          "This assumes only 1/5 of the task is left for B, but the correct combined work in 4 days leaves 2/5 of the task remaining, not 1/5, so 3 days is too short.",
+        fix: "This assumes only 1/5 of the task is left for B, but the correct combined work in 4 days leaves 2/5 of the task remaining, not 1/5, so 3 days is too short.",
+      },
+      {
+        text: "9 days",
+        sub: "Assumes A contributed nothing during the joint 4 days",
+        fix: "This ignores A's work entirely during the first 4 days and treats the whole task as left for B, rather than only the fraction remaining after both worked together.",
       },
     ],
     correctIndex: 0,
-    proTip:
-      "In joint-work problems, convert each person's time into a daily work rate (1/days), add rates for time worked together, then subtract the work done from 1 to get the fraction left for whoever finishes alone.",
-    lesson:
-      "A's rate is 1/12 per day and B's rate is 1/15 per day. Together their combined rate is 1/12 + 1/15 = 5/60 + 4/60 = 9/60 = 3/20 per day. In 4 days, they complete 4 × 3/20 = 12/20 = 3/5 of the task, leaving 2/5 remaining. B alone needs (2/5) ÷ (1/15) = (2/5) × 15 = 6 days to finish the rest.",
+    proTip: "In joint-work problems, convert each person's time into a daily work rate (1/days), add rates for time worked together, then subtract the work done from 1 to get the fraction left for whoever finishes alone.",
+    lesson: "A's rate is 1/12 per day and B's rate is 1/15 per day. Together their combined rate is 1/12 + 1/15 = 5/60 + 4/60 = 9/60 = 3/20 per day. In 4 days, they complete 4 × 3/20 = 12/20 = 3/5 of the task, leaving 2/5 remaining. B alone needs (2/5) ÷ (1/15) = (2/5) × 15 = 6 days to finish the rest.",
     remember: "For 'work together, then one leaves' problems, find the combined rate, compute the fraction finished in the joint period, and divide the remaining fraction by the solo worker's individual rate — not the combined rate.",
     interviewAnswer: "I converted both workers into daily rates: A does 1/12 of the task per day and B does 1/15 per day, so together they do 9/60, or 3/20, per day. Over 4 days that's 12/20, or 3/5 of the task done, leaving 2/5 remaining once A leaves. Dividing that 2/5 by B's solo rate of 1/15 gives 6, so B needs 6 more days alone.",
   },
@@ -204,38 +174,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Profit/Loss with Discount Chain",
     difficulty: "medium",
-    stem:
-      "A shopkeeper marks an item's price 50% above its cost price, then offers two successive discounts of 10% and then 20% on the marked price. What is his overall profit or loss percentage on the cost price?",
+    stem: "A shopkeeper marks an item's price 50% above its cost price, then offers two successive discounts of 10% and then 20% on the marked price. What is his overall profit or loss percentage on the cost price?",
     options: [
+      {
+        text: "4% profit",
+        sub: "Applies the two discounts to the cost price instead of the marked price",
+        fix: "This computes 0.9 × 0.8 directly on the cost price, ignoring the 50% markup step, instead of applying the discounts on top of the marked-up price.",
+      },
+      {
+        text: "10% loss",
+        sub: "Adds the two discount percentages and subtracts from the markup directly",
+        fix: "This treats 50% − 10% − 20% as if percentages combine by simple subtraction, but successive percentage changes must be multiplied as factors, not added or subtracted.",
+      },
+      {
+        text: "20% profit",
+        sub: "Stops after applying only the markup and the first discount",
+        fix: "This applies only the 10% discount after the markup and skips the second 20% discount entirely, leaving the calculation incomplete.",
+      },
       {
         text: "8% profit",
         sub: "Chains the markup and both discount multipliers correctly",
         fix: "",
       },
-      {
-        text: "20% profit",
-        sub: "Stops after applying only the markup and the first discount",
-        fix:
-          "This applies only the 10% discount after the markup and skips the second 20% discount entirely, leaving the calculation incomplete.",
-      },
-      {
-        text: "10% loss",
-        sub: "Adds the two discount percentages and subtracts from the markup directly",
-        fix:
-          "This treats 50% − 10% − 20% as if percentages combine by simple subtraction, but successive percentage changes must be multiplied as factors, not added or subtracted.",
-      },
-      {
-        text: "4% profit",
-        sub: "Applies the two discounts to the cost price instead of the marked price",
-        fix:
-          "This computes 0.9 × 0.8 directly on the cost price, ignoring the 50% markup step, instead of applying the discounts on top of the marked-up price.",
-      },
     ],
-    correctIndex: 0,
-    proTip:
-      "Chain every markup and discount as a multiplying factor on cost price — 50% markup is ×1.5, a 10% discount is ×0.9, a 20% discount is ×0.8 — then multiply all factors together to get the final selling price as a fraction of cost.",
-    lesson:
-      "Let the cost price be 100. The marked price after a 50% markup is 100 × 1.5 = 150. Applying a 10% discount: 150 × 0.9 = 135. Applying a further 20% discount: 135 × 0.8 = 108. The selling price is 108, which is 8 more than the cost price of 100, giving an 8% profit.",
+    correctIndex: 3,
+    proTip: "Chain every markup and discount as a multiplying factor on cost price — 50% markup is ×1.5, a 10% discount is ×0.9, a 20% discount is ×0.8 — then multiply all factors together to get the final selling price as a fraction of cost.",
+    lesson: "Let the cost price be 100. The marked price after a 50% markup is 100 × 1.5 = 150. Applying a 10% discount: 150 × 0.9 = 135. Applying a further 20% discount: 135 × 0.8 = 108. The selling price is 108, which is 8 more than the cost price of 100, giving an 8% profit.",
     remember: "Chain markups and successive discounts as multiplying factors (1 + markup%) × (1 − discount1%) × (1 − discount2%) applied to cost price — never add or subtract the percentages directly.",
     interviewAnswer: "I took cost price as 100 and multiplied through each step as a factor: a 50% markup makes it 1.5 times 100, which is 150, then a 10% discount multiplies that by 0.9 to get 135, and a 20% discount multiplies that by 0.8 to get 108. Since the final selling price of 108 is more than the cost price of 100, the shopkeeper makes an 8% profit overall, not the 20% or 10% you'd get from sloppier shortcuts.",
   },
@@ -244,38 +208,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Compound Interest Scenario",
     difficulty: "hard",
-    stem:
-      "The difference between the compound interest and the simple interest on a certain sum for 2 years at 10% per annum is ₹150. Find the sum (interest compounded annually).",
+    stem: "The difference between the compound interest and the simple interest on a certain sum for 2 years at 10% per annum is ₹150. Find the sum (interest compounded annually).",
     options: [
+      {
+        text: "₹1,500",
+        sub: "Drops a factor of 10 while solving for P",
+        fix: "This arises from a decimal-place slip while solving P × 0.01 = 150, giving a sum ten times too small to be consistent with a ₹150 difference at 10%.",
+      },
+      {
+        text: "₹7,500",
+        sub: "Forgets to square the rate fraction",
+        fix: "This solves P × (10/100) = 150 instead of P × (10/100)^2 = 150 — but CI and SI are identical after 1 year anyway, so a linear formula like this can't be the right model for a 2-year difference.",
+      },
       {
         text: "₹15,000",
         sub: "Uses the 2-year CI–SI difference formula P(r/100)^2",
         fix: "",
       },
       {
-        text: "₹7,500",
-        sub: "Forgets to square the rate fraction",
-        fix:
-          "This solves P × (10/100) = 150 instead of P × (10/100)^2 = 150 — but CI and SI are identical after 1 year anyway, so a linear formula like this can't be the right model for a 2-year difference.",
-      },
-      {
         text: "₹30,000",
         sub: "Doubles the rate fraction instead of squaring it",
-        fix:
-          "This computes P × (2 × 10/100) = 150 rather than P × (10/100)^2 = 150, confusing 'multiply by 2' with the correct squaring operation in the difference formula.",
-      },
-      {
-        text: "₹1,500",
-        sub: "Drops a factor of 10 while solving for P",
-        fix:
-          "This arises from a decimal-place slip while solving P × 0.01 = 150, giving a sum ten times too small to be consistent with a ₹150 difference at 10%.",
+        fix: "This computes P × (2 × 10/100) = 150 rather than P × (10/100)^2 = 150, confusing 'multiply by 2' with the correct squaring operation in the difference formula.",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For exactly 2 years, the gap between compound and simple interest equals simple interest on the first year's interest, which simplifies to the formula Difference = P × (r/100)^2 — memorize this shortcut instead of computing CI and SI separately.",
-    lesson:
-      "For 2 years, the standard shortcut is: Difference between CI and SI = P × (r/100)^2. Substituting the known values: 150 = P × (10/100)^2 = P × 0.01. Solving gives P = 150 / 0.01 = ₹15,000. Verification: SI for 2 years = 15000 × 0.10 × 2 = 3000. CI for 2 years = 15000 × 1.1^2 − 15000 = 18150 − 15000 = 3150. Difference = 3150 − 3000 = 150, which checks out.",
+    correctIndex: 2,
+    proTip: "For exactly 2 years, the gap between compound and simple interest equals simple interest on the first year's interest, which simplifies to the formula Difference = P × (r/100)^2 — memorize this shortcut instead of computing CI and SI separately.",
+    lesson: "For 2 years, the standard shortcut is: Difference between CI and SI = P × (r/100)^2. Substituting the known values: 150 = P × (10/100)^2 = P × 0.01. Solving gives P = 150 / 0.01 = ₹15,000. Verification: SI for 2 years = 15000 × 0.10 × 2 = 3000. CI for 2 years = 15000 × 1.1^2 − 15000 = 18150 − 15000 = 3150. Difference = 3150 − 3000 = 150, which checks out.",
     remember: "For exactly 2 years, CI − SI = P × (rate/100)^2 — this shortcut only holds for the 2-year case, not for 1 year (where CI = SI) or for 3+ years (which needs a different cubic expansion).",
     interviewAnswer: "I used the standard 2-year shortcut where the difference between compound and simple interest equals the principal times the rate fraction squared, so 150 equals P times 0.1 squared, which is 0.01. Solving that gives P equals 15,000. I double-checked by computing simple interest directly as 3,000 and compound interest as 3,150, and the gap between them is exactly 150, confirming the sum is ₹15,000.",
   },
@@ -284,38 +242,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Cube/Dice Logic",
     difficulty: "hard",
-    stem:
-      "A standard die has numbers 1 to 6 on its faces such that the sum of numbers on every pair of opposite faces is 7. The die starts in a position with 1 on top, 2 facing north, and 3 facing east. The die is then rolled (tipped over its edge, not spun in place) to the east three times in a row, each roll a quarter-turn. What number is on top after the third roll?",
+    stem: "A standard die has numbers 1 to 6 on its faces such that the sum of numbers on every pair of opposite faces is 7. The die starts in a position with 1 on top, 2 facing north, and 3 facing east. The die is then rolled (tipped over its edge, not spun in place) to the east three times in a row, each roll a quarter-turn. What number is on top after the third roll?",
     options: [
+      {
+        text: "4",
+        sub: "Treats opposite faces as adjacent when re-deriving the rolled state",
+        fix: "This assumes the face opposite the starting top (which would be 6, since 1+6=7) ends up on top, but rolling three quarter-turns in one direction does not simply flip the die to its opposite face.",
+      },
       {
         text: "3",
         sub: "Tracks top/bottom/east/west through three quarter-turns east, keeping north/south fixed",
         fix: "",
       },
       {
-        text: "6",
-        sub: "Stops tracking after only two rolls instead of three",
-        fix:
-          "This reports the top face after the second eastward roll, not the third — one more quarter-turn east still remains to apply.",
-      },
-      {
-        text: "4",
-        sub: "Treats opposite faces as adjacent when re-deriving the rolled state",
-        fix:
-          "This assumes the face opposite the starting top (which would be 6, since 1+6=7) ends up on top, but rolling three quarter-turns in one direction does not simply flip the die to its opposite face.",
-      },
-      {
         text: "2",
         sub: "Lets the north face change during an eastward roll",
-        fix:
-          "Rolling to the east only cycles the top, east, bottom, and west faces; the north and south faces (2 and 5 here) never change during an eastward roll, so 2 cannot end up on top from this motion.",
+        fix: "Rolling to the east only cycles the top, east, bottom, and west faces; the north and south faces (2 and 5 here) never change during an eastward roll, so 2 cannot end up on top from this motion.",
+      },
+      {
+        text: "6",
+        sub: "Stops tracking after only two rolls instead of three",
+        fix: "This reports the top face after the second eastward roll, not the third — one more quarter-turn east still remains to apply.",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For sequential dice rolls, track only the four faces affected by the roll direction (top, bottom, and the two side faces in line with the roll) each step — the two faces perpendicular to the roll axis never change.",
-    lesson:
-      "Opposite pairs are fixed: 1-6, 2-5, 3-4. Start: Top=1, Bottom=6, North=2, South=5, East=3, West=4. Each eastward roll cycles Top→East→Bottom→West→Top, leaving North/South untouched. After roll 1: Top=4, East=1, Bottom=3, West=6. After roll 2: Top=6, East=4, Bottom=1, West=3. After roll 3: Top=3, East=6, Bottom=4, West=1. North and South stay 2 and 5 throughout. So after three eastward rolls, the top face shows 3.",
+    correctIndex: 1,
+    proTip: "For sequential dice rolls, track only the four faces affected by the roll direction (top, bottom, and the two side faces in line with the roll) each step — the two faces perpendicular to the roll axis never change.",
+    lesson: "Opposite pairs are fixed: 1-6, 2-5, 3-4. Start: Top=1, Bottom=6, North=2, South=5, East=3, West=4. Each eastward roll cycles Top→East→Bottom→West→Top, leaving North/South untouched. After roll 1: Top=4, East=1, Bottom=3, West=6. After roll 2: Top=6, East=4, Bottom=1, West=3. After roll 3: Top=3, East=6, Bottom=4, West=1. North and South stay 2 and 5 throughout. So after three eastward rolls, the top face shows 3.",
     remember: "When rolling a die over an edge, only the top, bottom, and the two faces in line with the roll direction rotate through each other; the two faces perpendicular to the roll axis are untouched — track just those four faces step by step.",
     interviewAnswer: "I fixed the three opposite pairs first — 1 and 6, 2 and 5, 3 and 4 — and noted that rolling east only cycles the top, east, bottom, and west faces while north and south, which started as 2 and 5, never move. Walking through it one quarter-turn at a time: after the first roll top becomes 4, after the second roll top becomes 6, and after the third roll top becomes 3. So the answer is 3, and I can sanity-check it because 3's opposite face, 4, correctly ends up on the bottom at every step.",
   },
@@ -324,38 +276,32 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Pipes and Cisterns",
     difficulty: "medium",
-    stem:
-      "Pipe A can fill an empty tank in 20 hours. Pipe B can fill the same tank in 30 hours. Pipe C, a drain, can empty the full tank in 40 hours. If all three pipes are opened together on an empty tank, how long will it take to fill it completely?",
+    stem: "Pipe A can fill an empty tank in 20 hours. Pipe B can fill the same tank in 30 hours. Pipe C, a drain, can empty the full tank in 40 hours. If all three pipes are opened together on an empty tank, how long will it take to fill it completely?",
     options: [
+      {
+        text: "90/7 hours",
+        sub: "Subtracts the wrong pipe's rate",
+        fix: "This subtracts B's rate instead of C's, treating the filling pipe B as the outlet — but B is explicitly a filling pipe, and C is the one explicitly described as emptying the tank.",
+      },
+      {
+        text: "25 hours",
+        sub: "Averages the three individual times instead of combining rates",
+        fix: "Times cannot be averaged directly; work-rate problems require converting each time to a rate (1/hours), combining the rates, and then inverting the combined rate back to time.",
+      },
+      {
+        text: "10 hours",
+        sub: "Adds all three rates instead of subtracting the outlet pipe's rate",
+        fix: "Pipe C empties the tank, so its rate must be subtracted from the combined filling rate of A and B, not added to it.",
+      },
       {
         text: "120/7 hours (approximately 17 hours 9 minutes)",
         sub: "Combines all three rates with the outlet pipe subtracted",
         fix: "",
       },
-      {
-        text: "10 hours",
-        sub: "Adds all three rates instead of subtracting the outlet pipe's rate",
-        fix:
-          "Pipe C empties the tank, so its rate must be subtracted from the combined filling rate of A and B, not added to it.",
-      },
-      {
-        text: "90/7 hours",
-        sub: "Subtracts the wrong pipe's rate",
-        fix:
-          "This subtracts B's rate instead of C's, treating the filling pipe B as the outlet — but B is explicitly a filling pipe, and C is the one explicitly described as emptying the tank.",
-      },
-      {
-        text: "25 hours",
-        sub: "Averages the three individual times instead of combining rates",
-        fix:
-          "Times cannot be averaged directly; work-rate problems require converting each time to a rate (1/hours), combining the rates, and then inverting the combined rate back to time.",
-      },
     ],
-    correctIndex: 0,
-    proTip:
-      "For pipes-and-cisterns problems with both inlets and outlets, convert every pipe to a rate of tank-per-hour, add the filling pipes' rates, subtract the draining pipes' rates, then take the reciprocal of the net rate to get the time.",
-    lesson:
-      "Rates: A = 1/20 per hour, B = 1/30 per hour, C = −1/40 per hour (negative since it empties). Common denominator 120: A = 6/120, B = 4/120, C = −3/120. Net rate = (6 + 4 − 3)/120 = 7/120 per hour. Time to fill = 1 ÷ (7/120) = 120/7 ≈ 17.14 hours, i.e., 17 hours and about 9 minutes.",
+    correctIndex: 3,
+    proTip: "For pipes-and-cisterns problems with both inlets and outlets, convert every pipe to a rate of tank-per-hour, add the filling pipes' rates, subtract the draining pipes' rates, then take the reciprocal of the net rate to get the time.",
+    lesson: "Rates: A = 1/20 per hour, B = 1/30 per hour, C = −1/40 per hour (negative since it empties). Common denominator 120: A = 6/120, B = 4/120, C = −3/120. Net rate = (6 + 4 − 3)/120 = 7/120 per hour. Time to fill = 1 ÷ (7/120) = 120/7 ≈ 17.14 hours, i.e., 17 hours and about 9 minutes.",
     remember: "Treat outlet pipes as negative rates when combining with inlet pipes — net rate = sum of filling rates minus sum of draining rates, then time = 1 / net rate.",
     interviewAnswer: "I converted each pipe into a rate per hour: A fills 1/20 of the tank, B fills 1/30, and C drains 1/40, so I subtracted C's rate since it works against the other two. Using a common denominator of 120, that's 6 plus 4 minus 3, which is 7 out of 120 per hour as the net rate. Taking the reciprocal, 120 divided by 7, gives about 17 and a bit hours to fill the tank with all three pipes running together.",
   },
@@ -364,9 +310,13 @@ export const NEW_OA = [
     subject: "OA",
     concept: "Permutation & Combination Counting",
     difficulty: "medium",
-    stem:
-      "A committee of 3 members is to be formed from a group of 5 men and 4 women, with the requirement that the committee include at least 1 woman. In how many ways can the committee be formed? (Order of selection does not matter.)",
+    stem: "A committee of 3 members is to be formed from a group of 5 men and 4 women, with the requirement that the committee include at least 1 woman. In how many ways can the committee be formed? (Order of selection does not matter.)",
     options: [
+      {
+        text: "40",
+        sub: "Counts only the 'exactly 1 woman' case and ignores 2- or 3-woman committees",
+        fix: "This computes C(4,1) × C(5,2) = 40 for committees with exactly one woman, but 'at least 1 woman' also includes valid committees with 2 women or all 3 women, which this total leaves out.",
+      },
       {
         text: "74",
         sub: "Subtracts the all-men case from the total unrestricted selections",
@@ -375,27 +325,17 @@ export const NEW_OA = [
       {
         text: "84",
         sub: "Forgets to exclude the all-men committees",
-        fix:
-          "This is simply C(9,3), the total number of ways to pick any 3 people with no restriction, but it still includes committees made up entirely of men, which violate the 'at least 1 woman' condition.",
+        fix: "This is simply C(9,3), the total number of ways to pick any 3 people with no restriction, but it still includes committees made up entirely of men, which violate the 'at least 1 woman' condition.",
       },
       {
         text: "10",
         sub: "Reports only the excluded all-men count instead of the valid total",
-        fix:
-          "10 is C(5,3), the number of all-men committees that must be excluded — this is the complement being subtracted, not the final count of valid committees.",
-      },
-      {
-        text: "40",
-        sub: "Counts only the 'exactly 1 woman' case and ignores 2- or 3-woman committees",
-        fix:
-          "This computes C(4,1) × C(5,2) = 40 for committees with exactly one woman, but 'at least 1 woman' also includes valid committees with 2 women or all 3 women, which this total leaves out.",
+        fix: "10 is C(5,3), the number of all-men committees that must be excluded — this is the complement being subtracted, not the final count of valid committees.",
       },
     ],
-    correctIndex: 0,
-    proTip:
-      "For 'at least one' counting problems, it's almost always faster to compute the total unrestricted count and subtract the complement (the case with zero of the required group) rather than adding up every valid case separately.",
-    lesson:
-      "Total ways to choose any 3 people from 9 (5 men + 4 women) is C(9,3) = 84. The complement — committees with zero women, i.e., all men — is C(5,3) = 10. Subtracting the complement from the total gives the committees with at least 1 woman: 84 − 10 = 74.",
+    correctIndex: 1,
+    proTip: "For 'at least one' counting problems, it's almost always faster to compute the total unrestricted count and subtract the complement (the case with zero of the required group) rather than adding up every valid case separately.",
+    lesson: "Total ways to choose any 3 people from 9 (5 men + 4 women) is C(9,3) = 84. The complement — committees with zero women, i.e., all men — is C(5,3) = 10. Subtracting the complement from the total gives the committees with at least 1 woman: 84 − 10 = 74.",
     remember: "For 'at least one' combinatorics problems, compute total combinations minus the zero-of-that-group complement — don't try to add up the 1, 2, 3... cases separately unless forced to.",
     interviewAnswer: "Rather than separately counting committees with exactly 1, 2, or 3 women, I used the complement trick: find the total ways to pick any 3 from all 9 people, which is C(9,3) equals 84, then subtract the all-men committees, C(5,3) equals 10, since those are the only ones that fail the 'at least 1 woman' condition. That gives 84 minus 10, which is 74 valid committees.",
   },

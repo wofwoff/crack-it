@@ -4,38 +4,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Connection Pooling",
     difficulty: "medium",
-    stem:
-      "A Node.js API spins up a new Postgres client connection on every incoming request and closes it after the response. Under moderate load (200 req/s), p99 latency balloons and Postgres logs start showing 'too many clients already.' The app server's CPU and memory are both fine. What is the most likely fix?",
+    stem: "A Node.js API spins up a new Postgres client connection on every incoming request and closes it after the response. Under moderate load (200 req/s), p99 latency balloons and Postgres logs start showing 'too many clients already.' The app server's CPU and memory are both fine. What is the most likely fix?",
     options: [
       {
-        text: "Add a read replica to spread out the connections",
-        sub: "Scales reads horizontally",
-        fix:
-          "A read replica adds more total connection capacity but doesn't address the root cause: every request still pays the cost of opening and tearing down a fresh Postgres connection, and you'd hit the same per-instance connection ceiling on the replica too.",
+        text: "Create database indexes for frequently accessed columns.",
+        sub: "Optimizes query performance and retrieval speed.",
+        fix: "Indexing improves query execution times, but the 'too many clients' error and latency indicate connection management issues and exhaustion, not slow data retrieval or inefficient query plans.",
       },
       {
-        text: "Switch to a connection pool (e.g. pgBouncer or a client-side pool) sized to a fixed number of reusable connections",
-        sub: "Reuses a bounded set of open connections instead of opening one per request",
+        text: "Utilize a connection pool to manage reusable client connections.",
+        sub: "Manages a pool of reusable open connections.",
         fix: "",
       },
       {
-        text: "Increase Postgres's max_connections to a much higher value",
-        sub: "Raises the hard cap on concurrent connections",
-        fix:
-          "Each Postgres connection is a full OS process with its own memory overhead, so raising max_connections just delays the wall and adds significant server-side memory pressure; it doesn't fix the per-request connection churn causing the latency spike.",
+        text: "Increase the Postgres `max_connections` configuration.",
+        sub: "Expands the maximum concurrent client limit.",
+        fix: "Increasing `max_connections` escalates resource consumption per connection; it doesn't fix the rapid connection opening and closing, only defers the 'too many clients' error and adds server-side memory pressure.",
       },
       {
-        text: "Add an index on the most frequently queried table",
-        sub: "Speeds up query execution",
-        fix:
-          "Indexing helps query execution time, but the symptom described — 'too many clients' errors and latency under moderate load with normal app CPU/memory — points at connection setup/teardown overhead and exhaustion, not slow query plans.",
+        text: "Implement a read replica to offload query processing.",
+        sub: "Distributes read operations horizontally.",
+        fix: "A read replica increases read capacity but doesn't resolve the connection churn; each request still incurs opening and closing overhead, leading to similar issues on the replica itself.",
       },
     ],
     correctIndex: 1,
-    proTip:
-      "Opening a Postgres connection is expensive (process fork + auth + TLS handshake), and each one holds real server-side memory whether or not it's doing work. A pool amortizes that cost and caps concurrent connections to something the database can actually hold.",
-    lesson:
-      "Postgres handles each connection as a separate backend process, which makes connection setup/teardown relatively costly and makes max_connections a hard, memory-bound ceiling. Opening a new connection per request multiplies that cost under load and can exhaust the connection limit even when query work itself is cheap. A connection pooler (pgBouncer, or a pool built into the driver/ORM) keeps a bounded set of warm connections and hands them out to requests, which removes the per-request connection overhead and keeps usage under the database's limit.",
+    proTip: "Opening a Postgres connection is expensive (process fork + auth + TLS handshake), and each one holds real server-side memory whether or not it's doing work. A pool amortizes that cost and caps concurrent connections to something the database can actually hold.",
+    lesson: "Postgres handles each connection as a separate backend process, which makes connection setup/teardown relatively costly and makes max_connections a hard, memory-bound ceiling. Opening a new connection per request multiplies that cost under load and can exhaust the connection limit even when query work itself is cheap. A connection pooler (pgBouncer, or a pool built into the driver/ORM) keeps a bounded set of warm connections and hands them out to requests, which removes the per-request connection overhead and keeps usage under the database's limit.",
     remember: "Postgres connections are full OS processes — pool and reuse them; don't open one per request and don't just raise max_connections to paper over churn.",
     interviewAnswer: "The 'too many clients already' error combined with fine CPU/memory tells me this isn't a compute problem, it's connection churn — every request is paying the cost of a fresh Postgres connection (which is a full backend process with auth and memory overhead) and then throwing it away. The fix is a connection pool, either pgBouncer in front of Postgres or a pool in the app's driver, so requests borrow from a small set of already-established connections instead of creating new ones. Bumping max_connections just raises the ceiling and burns more server memory per idle connection — it doesn't address why connections are being opened so wastefully in the first place.",
   },
@@ -44,38 +38,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Read Replica Lag",
     difficulty: "hard",
-    stem:
-      "An e-commerce app writes a new order to the primary MySQL database, then immediately redirects the user to an order confirmation page that reads from a read replica. Users intermittently see 'order not found' for a second or two right after checkout, then it appears. The replica's replication thread shows no errors. What's going on?",
+    stem: "An e-commerce app writes a new order to the primary MySQL database, then immediately redirects the user to an order confirmation page that reads from a read replica. Users intermittently see 'order not found' for a second or two right after checkout, then it appears. The replica's replication thread shows no errors. What's going on?",
     options: [
       {
         text: "The write transaction violated a foreign key constraint on the replica",
         sub: "Replica rejects the row",
-        fix:
-          "If the replica rejected the row, replication would show an error or the replica would stop applying changes; the scenario says there are no replication errors, and the order does eventually appear.",
-      },
-      {
-        text: "Asynchronous replication lag: the replica hasn't applied the write yet when the confirmation page reads it",
-        sub: "Primary commits immediately; replicas catch up afterward",
-        fix: "",
-      },
-      {
-        text: "The replica is using a different isolation level than the primary",
-        sub: "Isolation level mismatch",
-        fix:
-          "Isolation level governs visibility within a single node's concurrent transactions, not whether a replica has received and applied a change that was committed on a different node.",
+        fix: "If the replica rejected the row, replication would show an error or the replica would stop applying changes; the scenario says there are no replication errors, and the order does eventually appear.",
       },
       {
         text: "The order row was deleted by a cascading foreign key on the primary",
         sub: "Row removed via ON DELETE CASCADE",
-        fix:
-          "Nothing in the scenario describes a delete; the order eventually shows up correctly, which is consistent with a delayed copy arriving, not a row being removed.",
+        fix: "Nothing in the scenario describes a delete; the order eventually shows up correctly, which is consistent with a delayed copy arriving, not a row being removed.",
+      },
+      {
+        text: "The replica is using a different isolation level than the primary",
+        sub: "Isolation level mismatch",
+        fix: "Isolation level governs visibility within a single node's concurrent transactions, not whether a replica has received and applied a change that was committed on a different node.",
+      },
+      {
+        text: "Asynchronous replication delay means the replica hasn't yet applied the primary's write",
+        sub: "Replica write application delay",
+        fix: "",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "'Read-your-writes' breaks the moment you write to a primary and read from an async replica. If a flow needs to see its own write immediately, route that specific read to the primary (or a replica you know is caught up) instead of redesigning your whole replication topology.",
-    lesson:
-      "Most MySQL and Postgres replica setups use asynchronous (or semi-synchronous) replication: the primary commits and acknowledges the write to the client before all replicas have necessarily applied it. There's a small window — usually milliseconds, but it can spike under load — where the replica is behind. A read immediately after a write can land in that window and miss the row entirely, even though replication is healthy and will catch up moments later.",
+    correctIndex: 3,
+    proTip: "'Read-your-writes' breaks the moment you write to a primary and read from an async replica. If a flow needs to see its own write immediately, route that specific read to the primary (or a replica you know is caught up) instead of redesigning your whole replication topology.",
+    lesson: "Most MySQL and Postgres replica setups use asynchronous (or semi-synchronous) replication: the primary commits and acknowledges the write to the client before all replicas have necessarily applied it. There's a small window — usually milliseconds, but it can spike under load — where the replica is behind. A read immediately after a write can land in that window and miss the row entirely, even though replication is healthy and will catch up moments later.",
     remember: "Async replication means commit-on-primary and apply-on-replica are not simultaneous — reading your own write from a replica right after writing it can race the lag.",
     interviewAnswer: "This is classic replication lag, not an error condition — the replica's replication thread is healthy, it's just asynchronous, so there's a small window after the primary commits where the replica hasn't applied that specific write yet. The user's request to read the confirmation page lands inside that window, gets a miss, and then a moment later the replica catches up and the order shows correctly, which matches the 'appears a second later' behavior described. The standard fix is to route read-your-write flows like this — immediately reading something you just wrote — to the primary, or to a replica you can confirm is caught up, rather than always defaulting reads to replicas.",
   },
@@ -84,38 +72,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Write-Ahead Logging",
     difficulty: "hard",
-    stem:
-      "A Postgres instance running on a cloud VM loses power mid-write — the data files on disk are only partially updated. After the VM reboots and Postgres restarts, the database comes back up with all committed transactions intact and no corruption. The actual table/index files were never fsynced before the crash. How is this possible?",
+    stem: "A Postgres instance running on a cloud VM loses power mid-write — the data files on disk are only partially updated. After the VM reboots and Postgres restarts, the database comes back up with all committed transactions intact and no corruption. The actual table/index files were never fsynced before the crash. How is this possible?",
     options: [
       {
-        text: "Postgres re-derives all table contents from query logs replayed against a known-good backup",
-        sub: "Logical replay from query history",
-        fix:
-          "Postgres doesn't keep a query-level log for crash recovery, and there's no backup involved in this scenario — recovery happens automatically from on-disk log records, not from re-executing past SQL statements.",
-      },
-      {
-        text: "The OS page cache silently persisted the dirty pages despite the power loss",
-        sub: "Page cache survives power loss",
-        fix:
-          "The OS page cache is volatile memory; a full power loss wipes it. The data files genuinely were left partially updated, which is exactly why a recovery mechanism is needed at all.",
-      },
-      {
-        text: "Write-ahead logging: WAL records describing the change were flushed to durable storage before the transaction committed, and are replayed on restart",
-        sub: "Log-before-data durability with replay on recovery",
+        text: "Write-ahead logging ensures transaction durability; WAL segments are flushed to disk before commit and replayed on recovery.",
+        sub: "WAL-based durability and crash recovery",
         fix: "",
       },
       {
-        text: "Postgres's autovacuum process rebuilt the corrupted pages from statistics",
-        sub: "Autovacuum repairs damaged pages",
-        fix:
-          "Autovacuum reclaims dead tuples and updates planner statistics; it has no role in crash recovery and cannot reconstruct lost or inconsistent data pages.",
+        text: "The autovacuum background process automatically detected and repaired corrupted data pages using internal statistics.",
+        sub: "Autovacuum's repair capabilities",
+        fix: "Autovacuum is responsible for garbage collection and statistics updates; it does not perform crash recovery or reconstruct damaged data pages due to power loss.",
+      },
+      {
+        text: "Postgres reconstructs table data by re-executing query logs against a consistent backup snapshot after the crash.",
+        sub: "Logical replay from query history",
+        fix: "Postgres's recovery mechanism relies on physical log records (WAL), not a log of SQL queries. This scenario does not imply the availability or use of a separate backup.",
+      },
+      {
+        text: "The operating system's page cache maintained the modified data in volatile memory, which was later written to disk.",
+        sub: "Volatile page cache persistence",
+        fix: "The OS page cache is volatile memory; a full power loss wipes its contents. Any partially updated data files would require a dedicated recovery mechanism, not a volatile cache.",
       },
     ],
-    correctIndex: 2,
-    proTip:
-      "The WAL rule is simple but powerful: never let a data page hit disk before the log record describing the change that produced it. That ordering is what turns 'we crashed mid-write' into 'replay the log and we're fine' instead of 'the database is corrupt.'",
-    lesson:
-      "Write-ahead logging requires that any change to a data page is first described in a log record, and that log record is flushed to durable storage before the transaction is considered committed — well before the actual data page necessarily makes it to disk. On crash recovery, Postgres replays the WAL from the last checkpoint forward, reapplying committed changes and discarding uncommitted ones, which reconstructs a consistent state even though the data files themselves were never safely flushed.",
+    correctIndex: 0,
+    proTip: "The WAL rule is simple but powerful: never let a data page hit disk before the log record describing the change that produced it. That ordering is what turns 'we crashed mid-write' into 'replay the log and we're fine' instead of 'the database is corrupt.'",
+    lesson: "Write-ahead logging requires that any change to a data page is first described in a log record, and that log record is flushed to durable storage before the transaction is considered committed — well before the actual data page necessarily makes it to disk. On crash recovery, Postgres replays the WAL from the last checkpoint forward, reapplying committed changes and discarding uncommitted ones, which reconstructs a consistent state even though the data files themselves were never safely flushed.",
     remember: "WAL = log the change durably before the data page hits disk; recovery replays the log so a crash never loses a committed write or corrupts the table files.",
     interviewAnswer: "This is write-ahead logging doing exactly what it's designed for — Postgres never marks a transaction committed until the WAL record for that change has been flushed to durable storage, completely independent of whether the actual heap or index pages have been written out yet. So when the VM loses power mid-write, the data files can absolutely be left in a half-updated, inconsistent state, but that's fine because on restart Postgres replays the WAL from the last checkpoint and reapplies every committed change in order, which reconstructs a consistent database. It's the same reason you'll see Postgres do a brief 'recovery' pass on startup after an unclean shutdown — that pause is the WAL replay happening before it accepts new connections.",
   },
@@ -124,15 +106,8 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "N+1 Query Problem",
     difficulty: "medium",
-    stem:
-      "A Rails-style ORM endpoint lists 50 blog posts along with each post's author name. The endpoint works fine in dev with 5 seed posts but takes 4+ seconds in production with 50 posts. The query log shows 1 query to fetch the posts, followed by 50 separate queries, each fetching one author by id. What's the fix?",
+    stem: "A Rails-style ORM endpoint lists 50 blog posts along with each post's author name. The endpoint works fine in dev with 5 seed posts but takes 4+ seconds in production with 50 posts. The query log shows 1 query to fetch the posts, followed by 50 separate queries, each fetching one author by id. What's the fix?",
     options: [
-      {
-        text: "Add an index on posts.author_id",
-        sub: "Speeds up each lookup query",
-        fix:
-          "An index would make each of the 50 author lookups faster individually, but you'd still be paying 50 separate network round-trips; the real problem is query count, not per-query speed.",
-      },
       {
         text: "Eager-load (join or batch-fetch) authors alongside posts in a single query",
         sub: "Replaces 50 lookups with one JOIN or one IN(...) batch query",
@@ -141,21 +116,22 @@ export const NEW_DBMS = [
       {
         text: "Move the author lookups to a read replica to parallelize them",
         sub: "Distributes the 50 queries across replicas",
-        fix:
-          "Spreading the same 50 round-trips across more database nodes still pays per-query network and planning overhead 50 times over; it reduces load on any single replica but doesn't fix the underlying access pattern.",
+        fix: "Spreading the same 50 round-trips across more database nodes still pays per-query network and planning overhead 50 times over; it reduces load on any single replica but doesn't fix the underlying access pattern.",
       },
       {
         text: "Cache the entire posts list in Redis for 24 hours",
         sub: "Avoids hitting the database on repeat requests",
-        fix:
-          "Caching can mask the symptom for repeat requests, but the first request (and every cache miss) still triggers the same 51-query pattern, and it doesn't fix the inefficient access pattern itself.",
+        fix: "Caching can mask the symptom for repeat requests, but the first request (and every cache miss) still triggers the same 51-query pattern, and it doesn't fix the inefficient access pattern itself.",
+      },
+      {
+        text: "Add an index on posts.author_id",
+        sub: "Speeds up each lookup query",
+        fix: "An index would make each of the 50 author lookups faster individually, but you'd still be paying 50 separate network round-trips; the real problem is query count, not per-query speed.",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "If your query log shows '1 query, then N queries that each fetch one related row,' that's the N+1 problem — almost always fixable with an eager-load directive (`.includes`, `JOIN`, `select_related`, `WITH (...)`) that turns N round-trips into one.",
-    lesson:
-      "The N+1 problem happens when an ORM lazily loads a related object for each row in a result set, turning what should be one query (with a JOIN) or two queries (with a batched IN(...) lookup) into N+1 separate round-trips. It's invisible with small dev datasets because N is tiny, then becomes a major latency and database-load issue once N scales to production volumes. Most ORMs provide an explicit eager-loading mechanism (Rails' `.includes`, Django's `select_related`/`prefetch_related`, SQLAlchemy's `joinedload`) specifically to collapse this pattern.",
+    correctIndex: 0,
+    proTip: "If your query log shows '1 query, then N queries that each fetch one related row,' that's the N+1 problem — almost always fixable with an eager-load directive (`.includes`, `JOIN`, `select_related`, `WITH (...)`) that turns N round-trips into one.",
+    lesson: "The N+1 problem happens when an ORM lazily loads a related object for each row in a result set, turning what should be one query (with a JOIN) or two queries (with a batched IN(...) lookup) into N+1 separate round-trips. It's invisible with small dev datasets because N is tiny, then becomes a major latency and database-load issue once N scales to production volumes. Most ORMs provide an explicit eager-loading mechanism (Rails' `.includes`, Django's `select_related`/`prefetch_related`, SQLAlchemy's `joinedload`) specifically to collapse this pattern.",
     remember: "N+1 = 1 query for the list plus N queries for each row's related data; fix it by eager-loading (JOIN or batched IN) instead of lazy-loading per row.",
     interviewAnswer: "The query log pattern — one query for the posts, then exactly 50 more, one per post — is the textbook signature of the N+1 problem: the ORM is lazily fetching each post's author individually as it iterates the result set, instead of fetching them all together. It's invisible in dev with 5 posts because 6 queries is nothing, but at 50 posts in production you're paying 51 network round-trips serially, which easily adds up to multiple seconds. The fix is to eager-load the association — a JOIN if you want it in one query, or a batched `WHERE id IN (...)` if you want it in two — so the author count goes from N queries down to one, regardless of how many posts are on the page.",
   },
@@ -164,14 +140,17 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Schema Migration Safety",
     difficulty: "hard",
-    stem:
-      "A team runs `ALTER TABLE users ADD COLUMN plan_tier TEXT NOT NULL DEFAULT 'free'` against a Postgres 10 production table with 80 million rows during business hours. The migration takes an exclusive lock and the table becomes completely unavailable for writes and reads for several minutes, causing an outage. What is the safest way to have made this change?",
+    stem: "A team runs `ALTER TABLE users ADD COLUMN plan_tier TEXT NOT NULL DEFAULT 'free'` against a Postgres 10 production table with 80 million rows during business hours. The migration takes an exclusive lock and the table becomes completely unavailable for writes and reads for several minutes, causing an outage. What is the safest way to have made this change?",
     options: [
       {
-        text: "Run the same ALTER TABLE statement, but during a lower-traffic window",
-        sub: "Same lock, less concurrent traffic",
-        fix:
-          "This reduces the blast radius but not the root cause: on Postgres versions before 11, adding a column with a non-null default still requires rewriting every existing row while holding an exclusive lock, so the table is still unavailable for the duration, just to fewer users.",
+        text: "Create a second table with the new schema and have the application dual-write to both until the migration finishes",
+        sub: "Manual dual-write shadow table",
+        fix: "This pattern (used for genuinely incompatible schema changes) is significantly more operationally complex and risky than necessary here — a NOT NULL column with a default is a well-understood case with a much simpler safe path.",
+      },
+      {
+        text: "Wrap the ALTER TABLE in a transaction so it can be rolled back if it's slow",
+        sub: "Transactional DDL as a safety net",
+        fix: "A transaction makes the change atomic and rollback-able if it fails, but it doesn't reduce lock duration or table unavailability while the statement is running — Postgres still has to rewrite the table under an exclusive lock either way.",
       },
       {
         text: "Add the column as nullable with no default first, backfill the value in batches, then add a NOT NULL constraint (or default) afterward",
@@ -179,23 +158,14 @@ export const NEW_DBMS = [
         fix: "",
       },
       {
-        text: "Wrap the ALTER TABLE in a transaction so it can be rolled back if it's slow",
-        sub: "Transactional DDL as a safety net",
-        fix:
-          "A transaction makes the change atomic and rollback-able if it fails, but it doesn't reduce lock duration or table unavailability while the statement is running — Postgres still has to rewrite the table under an exclusive lock either way.",
-      },
-      {
-        text: "Create a second table with the new schema and have the application dual-write to both until the migration finishes",
-        sub: "Manual dual-write shadow table",
-        fix:
-          "This pattern (used for genuinely incompatible schema changes) is significantly more operationally complex and risky than necessary here — a NOT NULL column with a default is a well-understood case with a much simpler safe path.",
+        text: "Run the same ALTER TABLE statement, but during a lower-traffic window",
+        sub: "Same lock, less concurrent traffic",
+        fix: "This reduces the blast radius but not the root cause: on Postgres versions before 11, adding a column with a non-null default still requires rewriting every existing row while holding an exclusive lock, so the table is still unavailable for the duration, just to fewer users.",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "On Postgres 11+, adding a column with a constant DEFAULT is metadata-only and instant — but a NOT NULL constraint still requires a full table validation scan. When in doubt (or on older Postgres), do it in stages: nullable column → backfill → constraint.",
-    lesson:
-      "Before Postgres 11, adding a column with a non-null DEFAULT required rewriting every row to populate the new value, all under an ACCESS EXCLUSIVE lock that blocks reads and writes on the table for the entire rewrite. The safe pattern decomposes this into low-risk steps: add the column as nullable with no default (fast metadata-only change), backfill existing rows in small batches in separate transactions to avoid long locks, then add the NOT NULL constraint (or a validated CHECK constraint, which in modern Postgres can skip re-scanning already-validated rows). This trades one long blocking operation for several short, low-impact ones.",
+    correctIndex: 2,
+    proTip: "On Postgres 11+, adding a column with a constant DEFAULT is metadata-only and instant — but a NOT NULL constraint still requires a full table validation scan. When in doubt (or on older Postgres), do it in stages: nullable column → backfill → constraint.",
+    lesson: "Before Postgres 11, adding a column with a non-null DEFAULT required rewriting every row to populate the new value, all under an ACCESS EXCLUSIVE lock that blocks reads and writes on the table for the entire rewrite. The safe pattern decomposes this into low-risk steps: add the column as nullable with no default (fast metadata-only change), backfill existing rows in small batches in separate transactions to avoid long locks, then add the NOT NULL constraint (or a validated CHECK constraint, which in modern Postgres can skip re-scanning already-validated rows). This trades one long blocking operation for several short, low-impact ones.",
     remember: "Big tables + NOT NULL + DEFAULT in one ALTER TABLE = table rewrite under an exclusive lock; split it into add-nullable, backfill in batches, then constrain.",
     interviewAnswer: "The outage happened because adding a NOT NULL column with a default forces Postgres to rewrite all 80 million rows under an ACCESS EXCLUSIVE lock, and on Postgres 10 that's not optimized away — the whole table is unavailable until the rewrite finishes. The safe version of this migration splits it into stages: first add the column as nullable with no default, which is a near-instant metadata-only change; then backfill the value for existing rows in small batches inside their own short transactions so you're never holding a long lock; then add the NOT NULL constraint at the end. Each individual step is fast and low-impact, even though the end result is the same schema — the lesson generalizes to basically every 'looks like one DDL statement but touches every row' migration.",
   },
@@ -204,38 +174,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Optimistic Locking",
     difficulty: "medium",
-    stem:
-      "Two warehouse employees open the same inventory record (quantity: 10) in a web app at the same time. Employee A ships 3 units and saves; the app sets quantity to 7. Employee B, still looking at the stale quantity: 10, ships 4 units and saves, setting quantity to 6 — silently erasing A's update. The team adds a `version` integer column and requires `UPDATE ... WHERE id = ? AND version = ?`, rejecting the write if zero rows match. What problem does this solve, and what must the app now do?",
+    stem: "Two warehouse employees open the same inventory record (quantity: 10) in a web app at the same time. Employee A ships 3 units and saves; the app sets quantity to 7. Employee B, still looking at the stale quantity: 10, ships 4 units and saves, setting quantity to 6 — silently erasing A's update. The team adds a `version` integer column and requires `UPDATE ... WHERE id = ? AND version = ?`, rejecting the write if zero rows match. What problem does this solve, and what must the app now do?",
     options: [
+      {
+        text: "It upgrades the transaction to Serializable isolation automatically",
+        sub: "Isolation level change",
+        fix: "Adding a version column and conditioning the UPDATE on it is an application-level (optimistic) concurrency check; it doesn't change the database's transaction isolation level at all.",
+      },
+      {
+        text: "It enforces referential integrity between the inventory table and the orders table",
+        sub: "Foreign key style protection",
+        fix: "No foreign key relationship is involved here; the version column protects against concurrent updates to the same row, not relationships between tables.",
+      },
       {
         text: "It prevents deadlocks by avoiding row-level locks entirely; the app doesn't need to change anything else",
         sub: "Lock-free by design, no app changes needed",
-        fix:
-          "Deadlocks weren't the problem described — this scenario never had two transactions waiting on each other's locks. And the app does need to change: it must detect the zero-rows-affected case and handle it (retry or surface a conflict), otherwise B's write would just silently disappear instead of overwriting A's.",
+        fix: "Deadlocks weren't the problem described — this scenario never had two transactions waiting on each other's locks. And the app does need to change: it must detect the zero-rows-affected case and handle it (retry or surface a conflict), otherwise B's write would just silently disappear instead of overwriting A's.",
       },
       {
         text: "It prevents a lost update by detecting that the row changed since it was read; the app must check the affected-row count and retry or reject B's stale write",
         sub: "Version mismatch signals a conflicting concurrent write",
         fix: "",
       },
-      {
-        text: "It enforces referential integrity between the inventory table and the orders table",
-        sub: "Foreign key style protection",
-        fix:
-          "No foreign key relationship is involved here; the version column protects against concurrent updates to the same row, not relationships between tables.",
-      },
-      {
-        text: "It upgrades the transaction to Serializable isolation automatically",
-        sub: "Isolation level change",
-        fix:
-          "Adding a version column and conditioning the UPDATE on it is an application-level (optimistic) concurrency check; it doesn't change the database's transaction isolation level at all.",
-      },
     ],
-    correctIndex: 1,
-    proTip:
-      "Optimistic locking trades 'block everyone else while I hold this row' for 'let everyone proceed, but reject anyone whose read is now stale.' It's cheap and lock-free, but only works if the app actually checks the affected-row count and handles the conflict — silently ignoring a 0-row UPDATE is just a different way to lose data.",
-    lesson:
-      "This is the classic lost update anomaly: B overwrites A's change because B never knew the row had moved since it was read. Optimistic locking fixes it without taking any database locks — each row carries a version (or updated_at timestamp), reads capture the current version, and writes are conditioned on that version still matching. If another transaction updated the row in between, the WHERE clause matches zero rows and the UPDATE silently affects nothing, so the application must explicitly check the row count and respond (typically by retrying with fresh data or showing the user a conflict).",
+    correctIndex: 3,
+    proTip: "Optimistic locking trades 'block everyone else while I hold this row' for 'let everyone proceed, but reject anyone whose read is now stale.' It's cheap and lock-free, but only works if the app actually checks the affected-row count and handles the conflict — silently ignoring a 0-row UPDATE is just a different way to lose data.",
+    lesson: "This is the classic lost update anomaly: B overwrites A's change because B never knew the row had moved since it was read. Optimistic locking fixes it without taking any database locks — each row carries a version (or updated_at timestamp), reads capture the current version, and writes are conditioned on that version still matching. If another transaction updated the row in between, the WHERE clause matches zero rows and the UPDATE silently affects nothing, so the application must explicitly check the row count and respond (typically by retrying with fresh data or showing the user a conflict).",
     remember: "Optimistic locking = condition the UPDATE on the version you read; zero rows affected means someone else changed it first, and the app must detect and handle that, not just trust the write succeeded.",
     interviewAnswer: "What was happening before is a lost update — B read the inventory row before A's write landed, so B's save silently clobbers A's change with no error and no warning. The version column fixes this by making every UPDATE conditional on the row still being at the version you originally read; if A already moved it from version 1 to version 2, B's UPDATE WHERE version = 1 matches zero rows and does nothing. The crucial part is that the application has to actually check that affected-row count — if it ignores it and assumes success, you've just turned a silent data-loss bug into a silent no-op bug. The right behavior is to detect the zero-row case and either retry with the fresh row or surface a 'someone else already updated this' conflict to the user.",
   },
@@ -244,38 +208,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Full-Text Search vs LIKE",
     difficulty: "medium",
-    stem:
-      "A support ticket search box runs `SELECT * FROM tickets WHERE body LIKE '%refund%'` against a table with 2 million rows. There's a B-tree index on `body`, but EXPLAIN shows a sequential scan, and the query takes 3+ seconds. The team wants fast keyword search across ticket bodies, including matches like 'refunding' and 'refunded'. What should they do?",
+    stem: "A support ticket search box runs `SELECT * FROM tickets WHERE body LIKE '%refund%'` against a table with 2 million rows. There's a B-tree index on `body`, but EXPLAIN shows a sequential scan, and the query takes 3+ seconds. The team wants fast keyword search across ticket bodies, including matches like 'refunding' and 'refunded'. What should they do?",
     options: [
       {
-        text: "Rebuild the same B-tree index with a higher fillfactor",
-        sub: "Tune index storage density",
-        fix:
-          "Fillfactor affects how much free space is reserved on index pages for future updates; it has no effect on whether a leading-wildcard LIKE pattern can use a standard B-tree index at all.",
+        text: "Increase work_mem so the sequential scan runs faster",
+        sub: "More memory for the scan",
+        fix: "work_mem affects sort/hash operation memory, not sequential scan throughput; it wouldn't turn a 2-million-row scan into a fast lookup, and it doesn't address matching word forms like 'refunding' either.",
       },
       {
-        text: "Switch to a full-text search index (e.g. Postgres tsvector/GIN, or Elasticsearch) built on stemmed/tokenized text",
-        sub: "Token-based index designed for keyword and word-form matching",
+        text: "Implement a full-text search indexing solution for the `body` column",
+        sub: "Dedicated full-text indexing",
         fix: "",
       },
       {
         text: "Add `body` to a composite index alongside `ticket_id`",
         sub: "Multi-column B-tree index",
-        fix:
-          "A composite B-tree index still can't be used to satisfy a `LIKE '%refund%'` predicate, because the wildcard on both sides means there's no usable prefix to seek on, regardless of which other columns are in the index.",
+        fix: "A composite B-tree index still can't be used to satisfy a `LIKE '%refund%'` predicate, because the wildcard on both sides means there's no usable prefix to seek on, regardless of which other columns are in the index.",
       },
       {
-        text: "Increase work_mem so the sequential scan runs faster",
-        sub: "More memory for the scan",
-        fix:
-          "work_mem affects sort/hash operation memory, not sequential scan throughput; it wouldn't turn a 2-million-row scan into a fast lookup, and it doesn't address matching word forms like 'refunding' either.",
+        text: "Rebuild the same B-tree index with a higher fillfactor",
+        sub: "Tune index storage density",
+        fix: "Fillfactor affects how much free space is reserved on index pages for future updates; it has no effect on whether a leading-wildcard LIKE pattern can use a standard B-tree index at all.",
       },
     ],
     correctIndex: 1,
-    proTip:
-      "A B-tree index can only be used by LIKE when the pattern has no leading wildcard (`'refund%'` can use it, `'%refund%'` can't). For real keyword search — including matching different word forms — you want a search-purpose index (GIN over tsvector, or a dedicated search engine), not a bigger or differently-tuned B-tree.",
-    lesson:
-      "A standard B-tree index stores values in sorted order and can only be searched efficiently via a prefix, so a `LIKE '%refund%'` pattern (wildcard on both ends) can't use it at all — Postgres falls back to scanning every row. Full-text search solves a fundamentally different problem: it tokenizes text into words, normalizes them (stemming 'refunding'/'refunded' down to 'refund'), and builds an inverted index (GIN over a `tsvector`) mapping tokens to rows, which makes keyword lookups fast and also handles word-form variation that LIKE can never match.",
+    proTip: "A B-tree index can only be used by LIKE when the pattern has no leading wildcard (`'refund%'` can use it, `'%refund%'` can't). For real keyword search — including matching different word forms — you want a search-purpose index (GIN over tsvector, or a dedicated search engine), not a bigger or differently-tuned B-tree.",
+    lesson: "A standard B-tree index stores values in sorted order and can only be searched efficiently via a prefix, so a `LIKE '%refund%'` pattern (wildcard on both ends) can't use it at all — Postgres falls back to scanning every row. Full-text search solves a fundamentally different problem: it tokenizes text into words, normalizes them (stemming 'refunding'/'refunded' down to 'refund'), and builds an inverted index (GIN over a `tsvector`) mapping tokens to rows, which makes keyword lookups fast and also handles word-form variation that LIKE can never match.",
     remember: "LIKE '%word%' can't use a B-tree index (no usable prefix) and can't match word forms; full-text search (tsvector/GIN or a search engine) solves both problems via tokenization and an inverted index.",
     interviewAnswer: "The B-tree index is useless here because `LIKE '%refund%'` has a wildcard on both sides — there's no fixed prefix for the index to seek on, so Postgres has no choice but to scan all 2 million rows and check each one. Even if it could use the index, B-tree equality/prefix matching would never catch 'refunding' or 'refunded' as matches for 'refund' anyway. The right tool is full-text search: convert the body column into a tsvector, stem and tokenize it so 'refund', 'refunding', and 'refunded' all normalize to the same lexeme, and back it with a GIN index, which turns this into a fast inverted-index lookup instead of a row-by-row string scan. For something heavier-duty than Postgres's built-in full-text search, you'd reach for Elasticsearch, but the core idea — tokenize and index, don't substring-scan — is the same.",
   },
@@ -284,38 +242,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Foreign Key Cascade Behavior",
     difficulty: "hard",
-    stem:
-      "An admin deletes a single user from the `users` table in production. Within seconds, that user's orders, order line items, and payment records all silently disappear too — far more data loss than the admin intended, and there's no audit trail of what happened. The orders table has `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`. What's the safest fix?",
+    stem: "An admin deletes a single user from the `users` table in production. Within seconds, that user's orders, order line items, and payment records all silently disappear too — far more data loss than the admin intended, and there's no audit trail of what happened. The orders table has `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`. What's the safest fix?",
     options: [
       {
-        text: "Drop the foreign key constraint entirely so deletes can't cascade",
-        sub: "Remove referential integrity",
-        fix:
-          "Removing the constraint would stop the cascade, but it also removes the database's guarantee that orders.user_id always points to a real user, opening the door to orphaned rows and silent data corruption elsewhere.",
+        text: "Modify the current foreign key definition to `ON DELETE SET NULL`, instructing the database to nullify the foreign key values in dependent records, thus retaining the rows but dissociating them from the parent user.",
+        sub: "Retains dependent records by dissociating foreign keys.",
+        fix: "While preventing deletion, setting foreign keys to NULL often breaks historical traceability and data relationships, making it challenging for reporting, analytics, or regulatory compliance, which is frequently worse than explicit deletion.",
       },
       {
-        text: "Replace ON DELETE CASCADE with ON DELETE RESTRICT (or NO ACTION), and implement intentional deletion/anonymization as an explicit, audited application operation (or use a soft-delete flag)",
-        sub: "Force deletes to be deliberate instead of an automatic side effect",
+        text: "Completely revoke the referential integrity constraint (`FOREIGN KEY`) from the `orders` table to prevent any automatic, database-managed cascading delete operations from occurring.",
+        sub: "Abolishes database-enforced referential integrity.",
+        fix: "Removing the foreign key constraint is a severe measure that eliminates data integrity guarantees, leading to potential data inconsistencies, orphaned records, and complex issues that must then be managed manually at the application layer.",
+      },
+      {
+        text: "Configure the foreign key to `ON DELETE RESTRICT` (or `NO ACTION`), and implement user data disposal through an explicit, auditable application process, such as soft-deletion.",
+        sub: "Enforce explicit and auditable data lifecycle management.",
         fix: "",
       },
       {
-        text: "Add an index on orders.user_id to make the cascade faster",
-        sub: "Speeds up the cascading delete",
-        fix:
-          "An index would make the cascade execute faster, which doesn't address the actual problem — the cascade itself, deleting far more data than intended with no audit trail, is the issue, not its speed.",
-      },
-      {
-        text: "Change the foreign key to ON DELETE SET NULL",
-        sub: "Nulls out user_id on related rows instead of deleting them",
-        fix:
-          "This avoids deleting the orders, but it permanently severs the link between historical orders/payments and the user who placed them, which is usually worse for an e-commerce/financial system that needs to retain that relationship for records and reporting.",
+        text: "Proactively create a highly-selective B-tree index on the `orders.user_id` foreign key column to significantly accelerate the existing `ON DELETE CASCADE` referential action, enhancing deletion speed.",
+        sub: "Accelerates referential integrity operations.",
+        fix: "An index primarily enhances query and join performance, and while it might speed up the cascade, it fundamentally fails to address the root problem of unintended data loss and lack of audit trail from automatic cascading deletes.",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "ON DELETE CASCADE is great for true ownership chains where child rows are meaningless without the parent (e.g., deleting a blog post should delete its comments). It's dangerous for anything with financial, legal, or audit implications — orders and payments should almost never auto-delete just because a user row did.",
-    lesson:
-      "ON DELETE CASCADE is a database-enforced, automatic, and silent side effect: deleting one row triggers deletion of every dependent row across the whole reference chain, with no application-level logging or confirmation. For data with real business or compliance weight (orders, payments, financial records), the safer default is RESTRICT/NO ACTION, which blocks the delete until dependents are handled explicitly, paired with an application-level deletion or anonymization workflow that can log who did what and why (or a soft-delete flag instead of a hard delete at all).",
+    correctIndex: 2,
+    proTip: "ON DELETE CASCADE is great for true ownership chains where child rows are meaningless without the parent (e.g., deleting a blog post should delete its comments). It's dangerous for anything with financial, legal, or audit implications — orders and payments should almost never auto-delete just because a user row did.",
+    lesson: "ON DELETE CASCADE is a database-enforced, automatic, and silent side effect: deleting one row triggers deletion of every dependent row across the whole reference chain, with no application-level logging or confirmation. For data with real business or compliance weight (orders, payments, financial records), the safer default is RESTRICT/NO ACTION, which blocks the delete until dependents are handled explicitly, paired with an application-level deletion or anonymization workflow that can log who did what and why (or a soft-delete flag instead of a hard delete at all).",
     remember: "ON DELETE CASCADE silently deletes the whole dependent chain with no audit trail — reserve it for true parent-owns-child data, and use RESTRICT plus an explicit, logged deletion workflow for anything financial or compliance-sensitive.",
     interviewAnswer: "The root cause is that ON DELETE CASCADE turned one admin action — deleting a user — into an automatic, silent deletion of orders, line items, and payments, with the database doing it as a side effect and nothing logging that it happened. The fix is to change the constraint to ON DELETE RESTRICT so the database refuses the delete if dependent rows exist, and move the actual 'remove this user's data' decision into application code that can be explicit and audited — log who initiated it, maybe require confirmation, and decide deliberately whether to hard-delete, anonymize, or soft-delete the related orders and payments. I'd avoid ON DELETE SET NULL too, since for financial records you usually want to keep the order-to-user link intact for reporting and compliance, not silently sever it.",
   },
@@ -324,38 +276,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Covering Indexes & EXPLAIN ANALYZE",
     difficulty: "hard",
-    stem:
-      "A query `SELECT order_id, status FROM orders WHERE customer_id = 42` runs against a table with an index on `customer_id`. EXPLAIN ANALYZE shows 'Index Scan using idx_customer_id' followed by a 'Heap Fetches: 8000' line, and the query is slower than expected for returning only a few hundred rows worth of data. What change would turn this into an index-only scan and cut the heap fetches?",
+    stem: "A query `SELECT order_id, status FROM orders WHERE customer_id = 42` runs against a table with an index on `customer_id`. EXPLAIN ANALYZE shows 'Index Scan using idx_customer_id' followed by a 'Heap Fetches: 8000' line, and the query is slower than expected for returning only a few hundred rows worth of data. What change would turn this into an index-only scan and cut the heap fetches?",
     options: [
       {
-        text: "Add status to the WHERE clause as an additional filter",
-        sub: "Filter on status too",
-        fix:
-          "Adding another filter condition changes which rows match, not how the engine retrieves the selected columns — it doesn't eliminate the need to visit the heap for column data the index doesn't carry.",
-      },
-      {
-        text: "Create a covering index, e.g. on (customer_id) INCLUDE (status), or a composite (customer_id, status) index, so the index itself contains every column the query needs",
-        sub: "Index carries order_id, customer_id, and status without a heap lookup",
+        text: "Create a covering index, for instance, `(customer_id) INCLUDE (status)`, or a composite index `(customer_id, status)`.",
+        sub: "Index contains all needed query columns to avoid heap lookups.",
         fix: "",
       },
       {
-        text: "Run VACUUM FULL on the orders table",
-        sub: "Rewrite the table to reclaim space",
-        fix:
-          "VACUUM FULL compacts the table and can help the visibility map (which affects index-only scan eligibility) in some cases, but it doesn't add the missing column data to the index — the heap fetches are happening because status simply isn't stored in the index at all.",
+        text: "Switch the index on `customer_id` from a B-tree to a hash index for optimized equality lookups.",
+        sub: "Utilize a hash structure for faster direct matches.",
+        fix: "Hash indexes do not support index-only scans and cannot store additional columns like `status`, preventing the elimination of heap fetches.",
       },
       {
-        text: "Switch the index to a hash index on customer_id",
-        sub: "Hash-based equality index",
-        fix:
-          "A hash index can speed up the equality lookup on customer_id itself, but it still wouldn't store the status column, so the engine would still need to visit the heap to fetch it — and hash indexes don't support index-only scans the way B-tree ones can.",
+        text: "Extend the `WHERE` clause to also filter on `status`, potentially reducing the initial result set size.",
+        sub: "Narrow down rows with an additional filter condition.",
+        fix: "Filtering on `status` reduces row count, but doesn't change how `status` is retrieved if not in the index, thus not eliminating heap fetches.",
+      },
+      {
+        text: "Execute `VACUUM FULL` on the `orders` table to reclaim space and update statistical data thoroughly.",
+        sub: "Perform table-level maintenance and compaction.",
+        fix: "VACUUM FULL compacts the table and improves statistics but does not add columns to an index required for index-only scans.",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "'Heap Fetches' in EXPLAIN ANALYZE output is your signal that Postgres found the row via the index but still had to go to the table to get column data the index doesn't store. Add those columns to the index (via INCLUDE or as extra key columns) and the heap fetches can drop toward zero.",
-    lesson:
-      "An index-only scan satisfies a query entirely from the index, without visiting the heap (table), but only if every column the query needs is present in the index and the relevant pages are marked all-visible in the visibility map. Here the index only covers customer_id, so even though it locates matching rows efficiently, Postgres still has to fetch each row from the heap to read order_id and status — that's the 'Heap Fetches' work. Making the index a covering index, by adding status as an INCLUDE column (or as a regular composite column), lets the index itself answer the whole SELECT, eliminating the heap visits.",
+    correctIndex: 0,
+    proTip: "'Heap Fetches' in EXPLAIN ANALYZE output is your signal that Postgres found the row via the index but still had to go to the table to get column data the index doesn't store. Add those columns to the index (via INCLUDE or as extra key columns) and the heap fetches can drop toward zero.",
+    lesson: "An index-only scan satisfies a query entirely from the index, without visiting the heap (table), but only if every column the query needs is present in the index and the relevant pages are marked all-visible in the visibility map. Here the index only covers customer_id, so even though it locates matching rows efficiently, Postgres still has to fetch each row from the heap to read order_id and status — that's the 'Heap Fetches' work. Making the index a covering index, by adding status as an INCLUDE column (or as a regular composite column), lets the index itself answer the whole SELECT, eliminating the heap visits.",
     remember: "Heap Fetches in EXPLAIN ANALYZE means the index found the row but didn't have the requested columns — add those columns to the index (INCLUDE or composite) to get a true index-only scan.",
     interviewAnswer: "The 'Heap Fetches: 8000' line is the tell — Postgres is using the index to find matching rows fast, but the index on customer_id alone doesn't store order_id or status, so for every matching row it still has to jump over to the heap to read those columns, which is exactly the random I/O an index-only scan is supposed to avoid. The fix is to make the index cover the whole query: either add status as an INCLUDE column on the customer_id index, or make it a composite (customer_id, status) index, so order_id (the indexed/included key) and status are both readable straight from the index pages. Once every selected column lives in the index, and assuming the table's visibility map is reasonably up to date, EXPLAIN should switch to a true 'Index Only Scan' with heap fetches near zero.",
   },
@@ -364,38 +310,32 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Idempotency Keys",
     difficulty: "hard",
-    stem:
-      "A mobile app calls POST /charge to bill a customer's card. On a flaky connection, the client times out waiting for a response and automatically retries the same request. The server actually processed the first request successfully — the customer is charged twice for one order. The team wants to fix this without making the client wait longer or removing retries (retries are needed for real transient failures). What should they add?",
+    stem: "A mobile app calls POST /charge to bill a customer's card. On a flaky connection, the client times out waiting for a response and automatically retries the same request. The server actually processed the first request successfully — the customer is charged twice for one order. The team wants to fix this without making the client wait longer or removing retries (retries are needed for real transient failures). What should they add?",
     options: [
-      {
-        text: "Make the charge endpoint a GET request instead of POST so it can be safely retried",
-        sub: "Use a 'safe' HTTP method",
-        fix:
-          "Changing the HTTP verb doesn't change what the operation does server-side — charging a card is inherently a side-effecting write, and GET semantics don't make a non-idempotent operation idempotent; this also misuses GET for a mutating action.",
-      },
-      {
-        text: "Require the client to generate a unique idempotency key per logical charge attempt, send it in a header, and have the server store/check it (e.g. via a unique constraint) so a retried request with the same key returns the original result instead of charging again",
-        sub: "Server deduplicates retries using a client-supplied key tied to one logical operation",
-        fix: "",
-      },
       {
         text: "Increase the client's request timeout so it never times out",
         sub: "Avoid triggering the retry at all",
-        fix:
-          "A longer timeout reduces how often this happens but doesn't eliminate the race — the server can still complete a charge just after the client gives up and retries (or the response can be lost in transit even if processing finished), so duplicate charges remain possible.",
+        fix: "A longer timeout reduces how often this happens but doesn't eliminate the race — the server can still complete a charge just after the client gives up and retries (or the response can be lost in transit even if processing finished), so duplicate charges remain possible.",
       },
       {
         text: "Wrap the charge logic in a database transaction with Serializable isolation",
         sub: "Strongest isolation level",
-        fix:
-          "Serializable isolation prevents anomalies between concurrent transactions reading/writing the same data, but the two retried requests are two separate, sequential transactions, each fully valid on its own — isolation level has no way to know they represent 'the same logical charge attempt.'",
+        fix: "Serializable isolation prevents anomalies between concurrent transactions reading/writing the same data, but the two retried requests are two separate, sequential transactions, each fully valid on its own — isolation level has no way to know they represent 'the same logical charge attempt.'",
+      },
+      {
+        text: "Make the charge endpoint a GET request instead of POST so it can be safely retried",
+        sub: "Use a 'safe' HTTP method",
+        fix: "Changing the HTTP verb doesn't change what the operation does server-side — charging a card is inherently a side-effecting write, and GET semantics don't make a non-idempotent operation idempotent; this also misuses GET for a mutating action.",
+      },
+      {
+        text: "Client sends a unique idempotency key per charge, allowing the server to deduplicate retries.",
+        sub: "Client key for server deduplication.",
+        fix: "",
       },
     ],
-    correctIndex: 1,
-    proTip:
-      "Idempotency keys move the 'did this already happen?' question from 'hope the network behaves' to 'ask the database,' via a unique constraint on (idempotency_key) that the second insert attempt will violate, letting the server just return the original result instead of repeating the side effect.",
-    lesson:
-      "Network timeouts are ambiguous: the client doesn't know if the request was lost, the server crashed before processing, or the server succeeded and only the response was lost. Blind retries on a non-idempotent operation like 'charge a card' can therefore duplicate the side effect. Idempotency keys solve this at the application layer: the client generates one key per logical attempt (often a UUID) and sends it with every retry of that same attempt; the server records processed keys (typically via a unique index) and, on seeing a repeat key, returns the stored result of the original attempt instead of executing the charge again.",
+    correctIndex: 3,
+    proTip: "Idempotency keys move the 'did this already happen?' question from 'hope the network behaves' to 'ask the database,' via a unique constraint on (idempotency_key) that the second insert attempt will violate, letting the server just return the original result instead of repeating the side effect.",
+    lesson: "Network timeouts are ambiguous: the client doesn't know if the request was lost, the server crashed before processing, or the server succeeded and only the response was lost. Blind retries on a non-idempotent operation like 'charge a card' can therefore duplicate the side effect. Idempotency keys solve this at the application layer: the client generates one key per logical attempt (often a UUID) and sends it with every retry of that same attempt; the server records processed keys (typically via a unique index) and, on seeing a repeat key, returns the stored result of the original attempt instead of executing the charge again.",
     remember: "Network timeouts are ambiguous about whether the write actually happened — idempotency keys let the server recognize a retried request as 'the same attempt' and return the original result instead of repeating a side effect like a charge.",
     interviewAnswer: "The core problem is that a timeout is genuinely ambiguous — the client has no way to know whether the original charge succeeded, failed, or is still in flight, so a 'safe' retry of a non-idempotent POST can easily double-charge the customer, and you can't fix that just by waiting longer or removing retries, since you need retries for real transient failures. The standard fix is an idempotency key: the client generates one key per logical charge attempt and sends it on the original request and every retry of that same attempt, and the server enforces a unique constraint on that key — typically storing it alongside the charge result — so when the retry arrives, the insert collides with the original, and the server just returns the first attempt's result instead of charging the card again. It pushes the 'have I seen this exact attempt before?' question onto the database, where a unique constraint can answer it reliably even under concurrent retries.",
   },
