@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import {
   BarChart3,
   Bell,
@@ -182,6 +182,79 @@ function subjectLabel(subject) {
   return SUBJECT_META[subject]?.name || subject;
 }
 
+export function parseAndFormatCode(text) {
+  if (typeof text !== "string") return text;
+  if (!text) return "";
+
+  // Split by block code blocks first: ```[optional lang]\n...```
+  const blockRegex = /(```[\s\S]*?```)/g;
+  const parts = text.split(blockRegex);
+
+  return parts.map((part, index) => {
+    // Check if the part is a code block
+    if (part.startsWith("```") && part.endsWith("```")) {
+      const rawCode = part.slice(3, -3);
+      let codeContent = rawCode;
+
+      // Extract optional language specifier from the first line
+      const lines = codeContent.split("\n");
+      if (lines.length > 0) {
+        const firstLine = lines[0].trim();
+        const knownLanguages = new Set([
+          "python", "py",
+          "cpp", "c++", "c",
+          "sql",
+          "javascript", "js",
+          "html", "css",
+          "bash", "sh",
+          "java", "json",
+          "rust",
+          "typescript", "ts"
+        ]);
+        if (knownLanguages.has(firstLine.toLowerCase())) {
+          codeContent = lines.slice(1).join("\n");
+        }
+      }
+
+      // Trim leading/trailing blank lines/newlines (while keeping indentation)
+      codeContent = codeContent.replace(/^\n+/, "").replace(/\n+$/, "");
+
+      return (
+        <pre key={`block-${index}`} className="code-block">
+          <code>{codeContent}</code>
+        </pre>
+      );
+    }
+
+    // It's normal text or inline code. Split by inline code: `code`
+    const inlineRegex = /(`[^`]+`)/g;
+    const subParts = part.split(inlineRegex);
+
+    return (
+      <Fragment key={`text-block-${index}`}>
+        {subParts.map((subPart, subIdx) => {
+          if (subPart.startsWith("`") && subPart.endsWith("`")) {
+            const inlineCode = subPart.slice(1, -1);
+            return <code key={`inline-${index}-${subIdx}`}>{inlineCode}</code>;
+          }
+
+          // Plain text - convert newlines to <br /> elements
+          const textLines = subPart.split("\n");
+          return textLines.reduce((acc, line, lineIdx) => {
+            if (lineIdx > 0) {
+              acc.push(<br key={`br-${index}-${subIdx}-${lineIdx}`} />);
+            }
+            if (line) {
+              acc.push(line);
+            }
+            return acc;
+          }, []);
+        })}
+      </Fragment>
+    );
+  });
+}
+
 function uniqueMcqConceptsForSubject(subject) {
   const seen = new Set();
   return QUESTIONS.filter((question) => question.subject === subject).reduce((concepts, question) => {
@@ -189,6 +262,21 @@ function uniqueMcqConceptsForSubject(subject) {
     if (!seen.has(key)) {
       seen.add(key);
       concepts.push({ key, label: question.concept, subject });
+    }
+    return concepts;
+  }, []);
+}
+
+// Returns concepts for a subject that are both in the CHEATSHEETS and have at least one question.
+// The progress breakdown should only track topics the app actually teaches.
+function cheatsheetConceptsForSubject(subject) {
+  const cheatsheetTopics = new Set((CHEATSHEETS[subject] || []).map((t) => t.topic));
+  const seen = new Set();
+  return QUESTIONS.filter((q) => q.subject === subject && cheatsheetTopics.has(q.concept)).reduce((concepts, q) => {
+    const key = questionConceptKey(q);
+    if (!seen.has(key)) {
+      seen.add(key);
+      concepts.push({ key, label: q.concept, subject });
     }
     return concepts;
   }, []);
@@ -1609,6 +1697,10 @@ export function App() {
               setCheatsheetSubject(null);
               setView("today");
             }}
+            reviewPractice={() => {
+              resetPracticeUi(0);
+              setView("practice");
+            }}
           />
         )}
 
@@ -1628,6 +1720,10 @@ export function App() {
             goToday={() => setView("today")}
             openProgress={() => setView("progress")}
             openPractice={() => setView("practice-setup")}
+            reviewSession={() => {
+              resetQuestionUi(0);
+              setView("question");
+            }}
           />
         )}
 
@@ -1757,7 +1853,7 @@ function FrameTop({
         {showCenterTitle && (
           <div className="top-center-title">
             <span className="pill neutral">{subjectLabel(activeQuestionSubject)}</span>
-            <span className="concept-text">{activeQuestionConcept}</span>
+            <span className="concept-text">{parseAndFormatCode(activeQuestionConcept)}</span>
           </div>
         )}
 
@@ -1998,7 +2094,7 @@ function TodayView({
             <div>
               <p className="eyebrow">Aptitude reasoning</p>
               <h2>{oaQuestion.concept}</h2>
-              <p>{oaQuestion.stem}</p>
+              <div className="teaser-stem-text">{parseAndFormatCode(oaQuestion.stem)}</div>
             </div>
           </div>
           <button className="dark-button" onClick={startOa}>
@@ -2235,7 +2331,9 @@ function QuestionView({
   useEffect(() => {
     if (answered && answerBarRef.current) {
       setTimeout(() => {
-        answerBarRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (answerBarRef.current) {
+          answerBarRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       }, 100);
     }
   }, [answered]);
@@ -2256,7 +2354,7 @@ function QuestionView({
           {!isIosApp && (
             <>
               <span className="pill neutral">{subjectLabel(question.subject)}</span>
-              <span>{question.concept}</span>
+              <span>{parseAndFormatCode(question.concept)}</span>
             </>
           )}
         </div>
@@ -2276,7 +2374,7 @@ function QuestionView({
               <span className="pill neutral">Scenario</span>
               <span className="pill accent">{question.difficulty}</span>
             </div>
-            <p className="question-stem">{question.stem}</p>
+            <div className="question-stem">{parseAndFormatCode(question.stem)}</div>
             <div className="options-list">
               {question.options.map((option, index) => {
                 const optionState =
@@ -2296,21 +2394,37 @@ function QuestionView({
                   >
                     <span className="option-letter">{String.fromCharCode(65 + index)}</span>
                     <span>
-                      <strong>{option.text}</strong>
-                      <small>{option.sub}</small>
+                      <strong>{parseAndFormatCode(option.text)}</strong>
+                      <small>{parseAndFormatCode(option.sub)}</small>
                     </span>
                   </button>
                 );
               })}
             </div>
             {answered ? (
-              <div className="answer-bar" ref={answerBarRef}>
-                <Verdict outcome={responseOutcome} />
-                <button className="dark-button" onClick={flip}>
-                  See explanation
-                  <ChevronRight size={16} aria-hidden="true" />
-                </button>
-              </div>
+              <>
+                <div className="answer-bar" ref={answerBarRef}>
+                  <Verdict outcome={responseOutcome} />
+                  <button className="dark-button" onClick={flip}>
+                    See explanation
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="card-actions">
+                  <button
+                    className="ghost-button small-action"
+                    onClick={previousQuestion}
+                    disabled={currentIndex === 0}
+                  >
+                    <ChevronLeft size={15} aria-hidden="true" />
+                    Previous
+                  </button>
+                  <button className="primary-button small" onClick={nextQuestion}>
+                    {currentIndex + 1 >= total ? "Finish set" : "Next question"}
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="skip-row">
                 <button className="text-button" onClick={blankOut}>
@@ -2326,23 +2440,23 @@ function QuestionView({
                 <p className="eyebrow">
                   {selectedIndex === -1 ? "Full Lesson" : isCorrect ? "Pro Tip" : "Targeted Fix"}
                 </p>
-                <h2>{question.options[question.correctIndex].text}</h2>
+                <h2>{parseAndFormatCode(question.options[question.correctIndex].text)}</h2>
               </div>
               {responseOutcome && <Verdict outcome={responseOutcome} />}
             </div>
 
             <div className="explanation-body">
               {isCorrect ? (
-                <p>{question.proTip}</p>
+                <div className="explanation-text">{parseAndFormatCode(question.proTip)}</div>
               ) : selectedIndex === -1 ? (
-                <p>{question.lesson}</p>
+                <div className="explanation-text">{parseAndFormatCode(question.lesson)}</div>
               ) : (
                 <>
-                  <p>{chosenOption?.fix}</p>
+                  <div className="explanation-text">{parseAndFormatCode(chosenOption?.fix)}</div>
                   {question.proTip && (
                     <div className="callout success">
                       <p className="eyebrow">Why the correct answer is right</p>
-                      <p>{question.proTip}</p>
+                      <div className="explanation-text">{parseAndFormatCode(question.proTip)}</div>
                     </div>
                   )}
                 </>
@@ -2350,7 +2464,7 @@ function QuestionView({
               {question.remember && (
                 <div className="callout lesson">
                   <p className="eyebrow">Remember</p>
-                  <p>{question.remember}</p>
+                  <div className="explanation-text">{parseAndFormatCode(question.remember)}</div>
                 </div>
               )}
               {AI_TOOLS_ENABLED && (
@@ -2373,6 +2487,14 @@ function QuestionView({
             </div>
 
             <div className="card-actions">
+              <button
+                className="ghost-button small-action"
+                onClick={previousQuestion}
+                disabled={currentIndex === 0}
+              >
+                <ChevronLeft size={15} aria-hidden="true" />
+                Previous
+              </button>
               {openLesson ? (
                 <button className="ghost-button small-action" onClick={() => openLesson(question.id)}>
                   <BookOpen size={15} aria-hidden="true" />
@@ -2741,16 +2863,16 @@ function LessonView({ question, onRate }) {
       <article className="lesson-paper lesson-document">
         <div className="lesson-main">
           <p className="eyebrow">{question.subject}</p>
-          <h1>{question.concept}</h1>
-          <p>{question.lesson}</p>
+          <h1>{parseAndFormatCode(question.concept)}</h1>
+          <div className="lesson-paragraph">{parseAndFormatCode(question.lesson)}</div>
           <div className="callout lesson">
             <p className="eyebrow">Real example</p>
-            <p>{getRealExampleText(question.stem)}</p>
+            <div className="lesson-paragraph">{parseAndFormatCode(getRealExampleText(question.stem))}</div>
           </div>
           {question.interviewAnswer && (
             <div className="callout neutral">
               <p className="eyebrow">Interview answer</p>
-              <p>{question.interviewAnswer}</p>
+              <div className="lesson-paragraph">{parseAndFormatCode(question.interviewAnswer)}</div>
             </div>
           )}
           <div className="card-actions lesson-actions">
@@ -2768,7 +2890,7 @@ function LessonView({ question, onRate }) {
   );
 }
 
-function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgress, openPractice }) {
+function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgress, openPractice, reviewSession }) {
   const [copied, setCopied] = useState(false);
   const correct = attempts.filter((attempt) => attempt.outcome === "correct").length;
   const concepts = [...new Set(todaySet.map((question) => question.concept))];
@@ -2851,7 +2973,11 @@ function SummaryView({ todaySet, attempts, streak, accuracy, goToday, openProgre
             <Copy size={16} aria-hidden="true" />
             {copied ? "Copied!" : "Copy results"}
           </button>
-          <button className="primary-button" onClick={openPractice}>
+          <button className="primary-button" onClick={reviewSession}>
+            Review questions
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+          <button className="ghost-button" onClick={openPractice}>
             Practice more questions
             <ChevronRight size={16} aria-hidden="true" />
           </button>
@@ -3122,7 +3248,7 @@ function CheatsheetView({ subject, attempts, dsaAttempts = [], startPractice, op
   );
 }
 
-function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, goToday }) {
+function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, goToday, reviewPractice }) {
   const meta = SUBJECT_META[subject] || { name: subject };
   const correct = attempts.filter((attempt) => attempt.outcome === "correct").length;
 
@@ -3136,7 +3262,11 @@ function PracticeSummaryView({ subject, practiceSet, attempts, goPracticeSetup, 
         </p>
         <div className="summary-actions">
           <button className="ghost-button" onClick={goToday}>Back to today</button>
-          <button className="primary-button" onClick={goPracticeSetup}>
+          <button className="primary-button" onClick={reviewPractice}>
+            Review questions
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+          <button className="ghost-button" onClick={goPracticeSetup}>
             Practice another topic
             <ChevronRight size={16} aria-hidden="true" />
           </button>
@@ -3165,16 +3295,19 @@ function ProgressView({
 }) {
   const activeSubjects = selectedCourses.filter((subject) => SUBJECTS.includes(subject));
   const subjectRows = activeSubjects.map((subject) => {
-    const concepts = uniqueMcqConceptsForSubject(subject);
-    const mastery = Math.round(
-      concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length,
-    );
+    // Use cheatsheet topics only — don't show concepts the app doesn't teach yet.
+    const concepts = cheatsheetConceptsForSubject(subject);
+    const mastery = concepts.length
+      ? Math.round(
+          concepts.reduce((sum, concept) => sum + (conceptState[concept.key]?.mastery || 0), 0) / concepts.length,
+        )
+      : 0;
     const coverage = subjectQuestionCoverage(subject, attempts);
     return { subject, concepts, mastery, coverage };
   });
   const activityLevels = buildActivityLevels(attempts, dsaAttempts);
   const visibleMcqConcepts = activeSubjects.flatMap((subject) =>
-    uniqueMcqConceptsForSubject(subject).map(({ key, label }) => [key, conceptState[key], label]),
+    cheatsheetConceptsForSubject(subject).map(({ key, label }) => [key, conceptState[key], label]),
   );
   const visibleDsaConcepts = selectedCourses.includes("DSA")
     ? DSA_PROMPTS.map((prompt) => {
@@ -3253,7 +3386,7 @@ function ProgressView({
                       style={{ "--mastery": `${mastery}%` }}
                       title={`${concept.label}: ${mastery}%`}
                     >
-                      {concept.label}
+                      {parseAndFormatCode(concept.label)}
                     </span>
                   );
                 })}
@@ -3284,7 +3417,7 @@ function ProgressView({
                     className="concept-cell"
                     style={{ "--mastery": `${conceptState[dsaConceptKey(prompt)]?.mastery || 0}%` }}
                   >
-                    {prompt.concept}
+                    {parseAndFormatCode(prompt.concept)}
                   </span>
                 ))}
               </div>
@@ -3850,7 +3983,7 @@ export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
                         <Move size={14} />
                       </span>
                     )}
-                    <span className="ordering-text">{step}</span>
+                    <span className="ordering-text">{parseAndFormatCode(step)}</span>
                   </div>
 
                   {!isChecked && (
@@ -3906,7 +4039,7 @@ export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
                           }
                         }}
                       >
-                        <p className="item-text">{item.text}</p>
+                        <div className="item-text">{parseAndFormatCode(item.text)}</div>
                       </button>
                     );
                   })}
@@ -3967,7 +4100,7 @@ export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
                                 isPlacedIncorrectly && "placed-incorrect"
                               )}
                             >
-                              <p className="item-text">{item.text}</p>
+                              <div className="item-text">{parseAndFormatCode(item.text)}</div>
                               {!isChecked && (
                                 <button
                                   className="remove-item-btn"
@@ -4096,20 +4229,20 @@ export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
                   {challenge.proTip && (
                     <div className="pro-tip-card">
                       <p className="eyebrow">Pro Tip</p>
-                      <p>{challenge.proTip}</p>
+                      <div className="explanation-text">{parseAndFormatCode(challenge.proTip)}</div>
                     </div>
                   )}
 
                   {challenge.lesson && (
                     <div className="lesson-paper">
                       <h3>Concept Explanation</h3>
-                      <p className="lesson-body-text">{challenge.lesson}</p>
+                      <div className="lesson-body-text">{parseAndFormatCode(challenge.lesson)}</div>
                     </div>
                   )}
 
                   {challenge.remember && (
                     <div className="remember-box">
-                      <strong>Remember:</strong> {challenge.remember}
+                      <strong>Remember:</strong> {parseAndFormatCode(challenge.remember)}
                     </div>
                   )}
 
@@ -4128,3 +4261,5 @@ export function InteractivePlayView({ challenge, recordAttempt, onBack }) {
     </div>
   );
 }
+
+export default App;
