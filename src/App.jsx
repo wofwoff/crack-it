@@ -171,11 +171,11 @@ function addCourseBeforeDsa(courses, courseId) {
 }
 
 function questionConceptKey(question) {
-  return `${question.subject}:${question.concept}`;
+  return `${question.subject}:${(question.concept || "").toLowerCase().trim()}`;
 }
 
 function dsaConceptKey(prompt) {
-  return `DSA:${prompt.concept}`;
+  return `DSA:${(prompt.concept || "").toLowerCase().trim()}`;
 }
 
 function subjectLabel(subject) {
@@ -267,19 +267,12 @@ function uniqueMcqConceptsForSubject(subject) {
   }, []);
 }
 
-// Returns concepts for a subject that are both in the CHEATSHEETS and have at least one question.
-// The progress breakdown should only track topics the app actually teaches.
 function cheatsheetConceptsForSubject(subject) {
-  const cheatsheetTopics = new Set((CHEATSHEETS[subject] || []).map((t) => t.topic));
-  const seen = new Set();
-  return QUESTIONS.filter((q) => q.subject === subject && cheatsheetTopics.has(q.concept)).reduce((concepts, q) => {
-    const key = questionConceptKey(q);
-    if (!seen.has(key)) {
-      seen.add(key);
-      concepts.push({ key, label: q.concept, subject });
-    }
-    return concepts;
-  }, []);
+  return (CHEATSHEETS[subject] || []).map((t) => ({
+    key: `${subject}:${(t.topic || "").toLowerCase().trim()}`,
+    label: t.topic,
+    subject,
+  }));
 }
 
 function buildInterviewQuestionScope(selectedCourses) {
@@ -330,7 +323,14 @@ function defaultConceptState() {
 }
 
 function subjectQuestionCoverage(subject, attempts) {
-  const subjectQuestionIds = new Set(QUESTIONS.filter((question) => question.subject === subject).map((q) => q.id));
+  const cheatsheetTopics = new Set((CHEATSHEETS[subject] || []).map((t) => (t.topic || "").toLowerCase().trim()));
+  const subjectQuestionIds = new Set(
+    QUESTIONS.filter(
+      (question) =>
+        question.subject === subject &&
+        cheatsheetTopics.has((question.concept || "").toLowerCase().trim())
+    ).map((q) => q.id)
+  );
   const attemptedIds = new Set(
     attempts.filter((attempt) => subjectQuestionIds.has(attempt.questionId)).map((attempt) => attempt.questionId),
   );
@@ -431,7 +431,8 @@ function loadStateSnapshot() {
     }
 
     return { state: normalizeSavedState(saved), status: "valid" };
-  } catch {
+  } catch (err) {
+    console.error("loadStateSnapshot error:", err);
     return { state: createInitialState(), status: "invalid" };
   }
 }

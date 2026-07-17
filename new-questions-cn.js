@@ -38,27 +38,32 @@ export const NEW_CN = [
     subject: "CN",
     concept: "HTTP/3 and QUIC",
     difficulty: "hard",
-    stem: "A mobile video-streaming app serves users on flaky cellular networks. Engineers notice that under HTTP/2, a single dropped packet for one video segment request stalls delivery of other in-flight segments on the same connection, even though those segments' data already arrived. After migrating to HTTP/3, this no longer happens. What changed?",
+    stem: `A mobile video-streaming app serves users on flaky cellular networks. During a packet capture of a stalled session, you observe:
+- A single TCP packet containing bytes for Stream 3 is dropped.
+- Stream 5 and Stream 7 have already had their subsequent packets successfully received by the OS buffer.
+- The application layer cannot read the data for Stream 5 and Stream 7 until the lost segment for Stream 3 is retransmitted and received.
+
+After migrating to HTTP/3, the same packet loss scenario does not block reading from other active streams. Which architectural change resolves this issue?`,
     options: [
       {
-        text: "HTTP/3 uses QUIC's stream multiplexing over UDP, enabling independent loss recovery for each stream, preventing one stream's loss from blocking data on others.",
+        text: "The protocol shifts stream multiplexing to a transport layer that manages independent sequence numbers per stream, ensuring packet loss on one stream only pauses delivery of that specific stream.",
         sub: "QUIC's Stream-level Independence",
         fix: "",
       },
       {
-        text: "HTTP/3 optimizes transport efficiency through larger maximum transmission units (MTUs), thereby reducing packet overhead and potential drops.",
+        text: "The protocol increases the default maximum transmission unit (MTU) size, reducing the total number of IP packets generated and decreasing the probability of packet drops.",
         sub: "Optimized MTU for Efficiency",
-        fix: "HTTP/3's solution is not about increasing MTUs or packet sizes. In fact, larger packets can worsen performance on flaky networks due to fragmentation. The benefit comes from independent stream processing.",
+        fix: "Increasing MTUs does not prevent transport-level head-of-line blocking; in fact, larger packets are more likely to be fragmented or dropped on flaky links, worsening stalls.",
       },
       {
-        text: "HTTP/3 prioritizes reliability by strict in-order processing of request streams, ensuring no parallel delivery until prior data is confirmed.",
+        text: "The protocol enforces strict in-order processing of all active request streams, ensuring no parallel delivery is attempted until prior stream segments are fully acknowledged.",
         sub: "Strict In-Order Stream Processing",
-        fix: "HTTP/3, via QUIC, maintains and enhances multiplexing of multiple concurrent streams. The improvement addresses inter-stream blocking due to *connection-wide* loss recovery, not by reducing parallel processing.",
+        fix: "Strict in-order processing across all streams would worsen head-of-line blocking by forcing streams to wait for each other. HTTP/3 resolves this by making stream delivery independent.",
       },
       {
-        text: "HTTP/3 implements advanced application-layer retransmission and caching policies, automatically recovering lost segments transparently.",
+        text: "The protocol delegates stream recovery to an application-layer frame buffer that dynamically caches and re-sequences out-of-order payloads before the transport layer receives them.",
         sub: "Application-Layer Resilience",
-        fix: "HTTP/3's improvement isn't primarily an application-layer retransmission scheme. The key change is at the transport layer, where QUIC's stream-level loss recovery prevents inter-stream blocking.",
+        fix: "The transport layer (QUIC) must handle stream assembly and loss recovery natively; the application layer cannot bypass transport-level blocking if the underlying TCP connection stalls.",
       },
     ],
     correctIndex: 0,
@@ -72,27 +77,37 @@ export const NEW_CN = [
     subject: "CN",
     concept: "TCP Retransmission & Timeouts",
     difficulty: "medium",
-    stem: "A backend service calls a downstream API over TCP. Under normal conditions, p99 latency is 80ms. During a network blip where a handful of packets are dropped, some requests that should fail fast instead hang for 200ms-1s+ before completing or erroring, way longer than the blip itself lasted. Why does TCP latency spike so much more than the actual packet loss duration?",
+    stem: `A backend service communicates with a downstream API. During a brief network blip, you observe the following packet sequence:
+\`\`\`text
+10:00:00.000 -> [SYN] Seq=0
+10:00:00.080 <- [SYN, ACK] Seq=0 Ack=1
+10:00:00.080 -> [ACK] Seq=1 Ack=1
+... (connection established, normal traffic)
+10:00:05.100 -> [Segment 12] (Lost in transit)
+10:00:05.180 -> [Segment 13] (Sent, but no ACK returned)
+10:00:06.300 -> [Segment 12 Retransmit] (Sent after a long delay)
+\`\`\`
+Even though the packet loss event lasted only 10ms, the request latency spikes to over 1.2 seconds. What is the transport-layer mechanism causing this latency multiplier?`,
     options: [
       {
-        text: "The application's own retry logic, configured with a long fixed timeout, repeatedly attempts reconnection after any perceived network issue.",
+        text: "The client application's connection pool detects the dropped packet and executes a series of sequential connection retries using a fixed timeout policy.",
         sub: "Application-level retry timeouts",
-        fix: "The stem describes this as a TCP/network-level latency spike correlated with packet loss, not an application retry policy — the mechanism in question is TCP's own loss recovery timing.",
+        fix: "The latency spike occurs at the transport layer before the application-level client library attempts a retry; it is governed by the underlying TCP socket's retransmission timers.",
       },
       {
-        text: "DNS is configured to re-resolve the downstream hostname on every perceived packet loss, leading to repeated lookup overhead and significant latency.",
+        text: "The DNS resolver performs a full lookup for the downstream endpoint, bypassing local cache TTLs due to a perceived network-layer connection failure.",
         sub: "Aggressive DNS re-resolution",
-        fix: "DNS resolution happens once per connection setup (or per TTL expiry), not per dropped packet within an established TCP connection — it doesn't explain mid-connection stalls from packet loss.",
+        fix: "DNS resolution is not re-triggered for individual packets lost within an already established TCP connection; lookups happen during connection establishment.",
       },
       {
-        text: "TCP's retransmission timeout (RTO) exponentially increases its delay when packets are lost, causing recovery times to significantly outlast the brief network blip.",
+        text: "The sender falls back to a retransmission timeout (RTO) calculated from smoothed round-trip times, which is padded for network safety and can double exponentially.",
         sub: "Exponential RTO backoff",
         fix: "",
       },
       {
-        text: "The TLS layer detects data integrity issues from packet loss and initiates a full session renegotiation, adding significant cryptographic overhead.",
+        text: "The transport layer triggers a TLS session renegotiation to re-verify cryptographic session keys after detecting out-of-order segment arrivals.",
         sub: "TLS session re-handshake",
-        fix: "TCP packet loss doesn't trigger TLS renegotiation; TLS operates above TCP and is unaffected by lower-layer retransmissions as long as the underlying bytes eventually arrive in order.",
+        fix: "TLS session renegotiation is not triggered by TCP-level packet loss; TLS operates on top of the reliable stream provided by TCP and is unaware of underlying retransmissions.",
       },
     ],
     correctIndex: 2,
@@ -106,25 +121,25 @@ export const NEW_CN = [
     subject: "CN",
     concept: "Nagle's Algorithm & Delayed ACK",
     difficulty: "hard",
-    stem: "A low-latency trading client sends small (a few bytes) TCP messages to a server and expects a small ACK-triggered response quickly. Instead, engineers observe consistent ~40ms delays on many of these small writes, suspiciously close to a common delayed-ACK timer value. Both Nagle's algorithm (sender side) and delayed ACK (receiver side) are enabled by default. What's actually happening?",
+    stem: "A low-latency trading client sends small (a few bytes) TCP messages to a server and expects a small ACK-triggered response quickly. Instead, engineers observe consistent ~40ms delays on many of these small writes. Both Nagle's algorithm (sender side) and delayed ACK (receiver side) are enabled by default. What is the root mechanical cause of this delay?",
     options: [
       {
-        text: "The server's central processing unit is experiencing severe overload, leading to significant congestion in its packet processing queues, which consistently introduces a uniform delay of approximately 40ms before requests are handled.",
+        text: "The server's application-layer processing thread suffers from CPU starvation, causing incoming packets to sit in the OS socket queue for a standard 40ms scheduling quantum.",
         sub: "Server CPU overload and queuing",
-        fix: "A CPU-queueing explanation wouldn't produce a delay this consistent and specific to small writes, nor would it correlate with a known delayed-ACK timer value — this is the textbook Nagle/delayed-ACK interaction.",
+        fix: "Server scheduling latency is highly variable and does not consistently align with a specific 40ms window or target small, latency-sensitive TCP write operations selectively.",
       },
       {
-        text: "The operating system kernel is configured to implicitly batch small TCP write operations, consolidating multiple tiny data segments together for more efficient network transmission, scheduling them to be sent at fixed 40ms intervals.",
+        text: "The client's operating system kernel queues outbound packets in a TCP buffer, wait-scheduling them to be sent only at system-wide tick intervals of 40ms.",
         sub: "OS kernel TCP write batching",
-        fix: "There's no general-purpose OS write-batching mechanism on this timescale tied to TCP sends; the specific, well-known cause of ~40ms stalls on small TCP writes is the Nagle/delayed-ACK interaction.",
+        fix: "The OS kernel does not batch TCP sends on a fixed 40ms timer unless Nagle's algorithm is explicitly waiting for an acknowledgment of previous data.",
       },
       {
-        text: "TLS record buffering, operating at the application layer, accumulates small messages until a full record's worth of data is gathered, delaying transmission for security and efficiency, rather than flushing each byte immediately.",
+        text: "The TLS implementation buffers small payload blocks until a cryptographic block cipher boundary of 16KB is reached, introducing a 40ms application-layer delay.",
         sub: "TLS application-layer buffering",
-        fix: "TLS record buffering isn't tied to a ~40ms timer and is a separate concern from this classic transport-layer interaction; the delay matches the known Nagle's algorithm + delayed ACK pattern.",
+        fix: "TLS record buffering is determined by write sizes and buffer settings, not by a fixed 40ms timer. The stall here is a transport-layer interaction.",
       },
       {
-        text: "Nagle's algorithm on the sender defers the small segment, awaiting an ACK. The receiver's delayed ACK defers its acknowledgment, expecting a reply to piggyback on. This mutual waiting causes the ~40ms stall.",
+        text: "The sender halts outgoing sub-MSS packets while awaiting an acknowledgment for in-flight data, while the receiver delays its ACK hoping to piggyback it on a response.",
         sub: "Nagle and Delayed ACK interaction",
         fix: "",
       },
@@ -143,24 +158,24 @@ export const NEW_CN = [
     stem: "At 2am, every client suddenly starts failing to connect to api.example.com with TLS errors like 'certificate has expired' or 'unable to verify the first certificate.' Nothing was deployed in the last 24 hours, and the leaf certificate's expiry date (checked in the cert itself) is still six months away. What's the most likely cause?",
     options: [
       {
-        text: "The server's intermediate CA certificate expired, invalidating the full trust chain.",
+        text: "The server's certificate configuration includes an intermediate certificate authority (CA) certificate that has expired, breaking the cryptographic path of trust.",
         sub: "Expired server intermediate CA",
         fix: "",
       },
       {
-        text: "The server's private key was rotated without re-issuing the associated public certificate.",
+        text: "The server rotated its private key without updating the corresponding public certificate, leading to validation mismatches during the key exchange phase.",
         sub: "Server key mismatch after rotation",
-        fix: "A private key mismatch with the public certificate would cause cryptographic signature validation failures, not specifically 'certificate has expired' or trust chain-related errors.",
+        fix: "A private key mismatch with the public certificate will cause cryptographic handshake signatures to fail, not certificate chain validation or expiry errors.",
       },
       {
-        text: "Widespread client clock drift led to certificates appearing prematurely expired during validation.",
+        text: "A global time synchronization drift occurred across client devices, making the current leaf certificate appear to have expired relative to the local system time.",
         sub: "Widespread client clock drift",
-        fix: "It's highly improbable for all client devices worldwide to experience simultaneous clock drift at the exact same moment. A single server-side issue is a more plausible cause for such universal failure.",
+        fix: "Widespread client clock synchronization drift is highly unlikely to happen simultaneously across all client devices at a specific minute.",
       },
       {
-        text: "DNS resolution for api.example.com was misconfigured, causing traffic to be routed incorrectly.",
+        text: "The DNS server returned an incorrect IP address for the API gateway, routing traffic to a legacy server that has an expired wildcard certificate installed.",
         sub: "DNS misconfiguration",
-        fix: "Incorrect DNS resolution typically causes connection failures or hostname mismatches, not 'certificate expired' errors. The problem explicitly mentions specific TLS errors related to certificate expiry and chain validation.",
+        fix: "A DNS routing issue would result in hostname validation errors (such as a name mismatch) rather than specific trust chain or certificate expiry errors.",
       },
     ],
     correctIndex: 0,
@@ -177,24 +192,24 @@ export const NEW_CN = [
     stem: "A service makes frequent HTTP calls to a downstream API. After a code change that switched from a shared HTTP client instance to creating a brand-new HTTP client (and thus a new TCP+TLS connection) for every single request, p50 latency per call jumped from 5ms to 60ms even though the downstream API itself didn't change. What explains the jump?",
     options: [
       {
-        text: "The new client defaults to HTTP/1.0, which closes the connection after each response, preventing persistent connection utilization.",
+        text: "The newly instantiated HTTP client defaults to using HTTP/1.0, which enforces server-side connection teardown and prevents persistent communication channels.",
         sub: "Legacy HTTP protocol default",
-        fix: "The problem states the change is related to client instance creation and TCP/TLS connections, not explicitly a protocol version downgrade. While HTTP/1.0 inherently prevents persistence, the scenario points more directly to the underlying TCP/TLS connection setup costs.",
+        fix: "While HTTP/1.0 defaults to non-persistent connections, modern HTTP clients default to HTTP/1.1 or HTTP/2, and the issue is client-side failure to share the connection pool.",
       },
       {
-        text: "Every request now incurs the full overhead of connection establishment, including TCP and TLS handshakes, without persistent connection reuse.",
+        text: "Each request now incurs the overhead of establishing a new TCP connection and executing a full TLS handshake, instead of reusing an already active session.",
         sub: "Full connection setup overhead",
         fix: "",
       },
       {
-        text: "The downstream API initiated aggressive rate limiting due to perceived increased load, introducing delays for each individual call.",
+        text: "The downstream API gateway detects the high volume of unique client connections and applies rate-limiting rules that artificially delay processing.",
         sub: "Aggressive API rate limiting",
-        fix: "The number of logical requests remains constant; only the connection strategy changed. Rate limiting typically manifests as intermittent errors or throttled responses, not a uniform latency increase across all calls.",
+        fix: "Rate limiting from a gateway typically returns a 429 Too Many Requests status code or rejects the request, rather than consistently adding a fixed network delay.",
       },
       {
-        text: "The client now performs a fresh DNS resolution for each request, bypassing typical local caching mechanisms.",
+        text: "The client host performs a fresh recursive DNS lookup for every API request because the new client instance disables local operating system name caches.",
         sub: "Frequent DNS resolution",
-        fix: "The scenario details changes to HTTP client and TCP connection management, not DNS resolution. While DNS lookups add latency, they are typically cached and unlikely to cause such a dramatic and consistent increase.",
+        fix: "The operating system's DNS resolver cache is system-wide and is not bypassed or disabled simply by creating a new HTTP client instance in the application code.",
       },
     ],
     correctIndex: 1,
@@ -242,27 +257,33 @@ export const NEW_CN = [
     subject: "CN",
     concept: "HTTP Caching Headers (ETag / Cache-Control)",
     difficulty: "medium",
-    stem: "A product page's hero image is served with `Cache-Control: max-age=86400`. Marketing swaps the image file at the same URL mid-afternoon for a flash sale, but many returning users still see the old image for up to 24 hours, even after a hard-ish refresh. Engineers want future swaps to be picked up immediately while still keeping aggressive caching for unchanged assets. What's the standard fix?",
+    stem: `A product page's hero image is served with the following response headers:
+\`\`\`http
+HTTP/1.1 200 OK
+Cache-Control: max-age=86400
+Content-Type: image/jpeg
+\`\`\`
+Marketing swaps the image file at the same URL mid-afternoon for a flash sale, but returning users still see the old image for up to 24 hours. Engineers want future swaps to be picked up immediately while keeping aggressive caching for unchanged assets. What is the standard industry pattern to solve this?`,
     options: [
       {
-        text: "Instruct end-users to perform a hard refresh or manually clear their browser's cache for specific domain assets.",
+        text: "Instruct users to perform a hard reload to clear the local browser state, or use administrative APIs to force client-side cache clearing.",
         sub: "Manual end-user cache invalidation",
-        fix: "Relying on manual user actions for cache invalidation is not a scalable or reliable engineering solution in production environments, as it places the burden on the user and lacks automation.",
+        fix: "Manual user intervention is not a viable or scalable solution for production web applications and cannot be programmatically controlled by the server.",
       },
       {
-        text: "Implement cache-busting by versioning asset URLs, or use strong validators like ETags for conditional revalidation with the origin server.",
+        text: "Append a content-based cryptographic hash to the image filename, or add a strong validator header for conditional validation requests.",
         sub: "Cache-busting or conditional revalidation",
         fix: "",
       },
       {
-        text: "Set `Cache-Control: max-age=0, must-revalidate` for all resources to force immediate revalidation on every request, effectively disabling browser caching.",
+        text: "Configure the origin server to return a cache directive of max-age=0, must-revalidate for all media assets, disabling client-side storage.",
         sub: "Forced revalidation for all assets",
-        fix: "While this ensures immediate updates, it completely negates the performance benefits of client-side caching for *all* assets, including static ones, leading to unnecessary server load and slower page loads. It's not a targeted solution.",
+        fix: "While this ensures freshness, disabling local caching entirely increases server bandwidth and page load times, violating the goal of caching unchanged assets.",
       },
       {
-        text: "Migrate the asset delivery protocol from HTTPS to plain HTTP, theorizing that security policies might interfere with aggressive client-side caching.",
+        text: "Downgrade the asset delivery protocol from HTTPS to unencrypted HTTP to prevent browser security policies from caching static resources.",
         sub: "Protocol change for cache behavior",
-        fix: "The underlying HTTP caching mechanisms (like max-age and ETag) function identically regardless of whether the connection is HTTP or HTTPS. Downgrading to HTTP would introduce severe security vulnerabilities without addressing the caching issue.",
+        fix: "Protocol downgrades do not bypass or modify HTTP caching rules; caching headers behave identically under HTTP and HTTPS, and this would introduce security risks.",
       },
     ],
     correctIndex: 1,
@@ -279,24 +300,24 @@ export const NEW_CN = [
     stem: "After a service migrates to run inside an overlay network (VPN/VXLAN-style encapsulation) with an effective MTU of 1400 bytes instead of the standard 1500, clients report that small API calls work fine, but requests with larger payloads (file uploads, big JSON bodies) intermittently hang or time out, especially through certain corporate firewalls. What's the likely root cause?",
     options: [
       {
-        text: "The server's connection pool is exhausted, especially when processing resource-intensive larger request payloads, leading to intermittent service unavailability.",
+        text: "The server's application thread pool is exhausted because parsing larger request bodies requires additional heap allocation, stalling subsequent requests.",
         sub: "Connection Pool Exhaustion",
-        fix: "Connection pool exhaustion typically manifests as a general capacity or concurrency issue impacting all request sizes, rather than specifically correlating with payload size and MTU changes.",
+        fix: "Thread pool exhaustion affects all requests regardless of payload size, and would not be specifically triggered by a change in the overlay network's MTU.",
       },
       {
-        text: "PMTUD failure: Firewalls block ICMP 'fragmentation needed' messages, causing large packets exceeding path MTU to be silently dropped ('black-holed').",
+        text: "Firewalls block ICMP 'packet too big' messages, preventing the sender from discovering the reduced path MTU and causing oversized packets to be silently dropped.",
         sub: "Black-holed PMTUD due to blocked ICMP",
         fix: "",
       },
       {
-        text: "TLS session resumption fails for larger requests, necessitating a full handshake which then times out due to network conditions.",
+        text: "The TLS layer fails to complete session resumption because larger payloads trigger a full security handshake that exceeds default connection timeout limits.",
         sub: "TLS Resumption Failure",
-        fix: "TLS session resumption behavior is not directly linked to request payload size and cannot explain the problem's sudden appearance after the MTU change in the overlay network.",
+        fix: "TLS session resumption is not payload-size dependent; the handshake payloads themselves are small and would not cause timeouts specific to file uploads.",
       },
       {
-        text: "The application's JSON parser experiences a buffer overflow or resource exhaustion when attempting to process unusually large or malformed request bodies.",
+        text: "The application's JSON parser crashes or deadlocks when reading non-contiguous data fragments generated by network-layer packet division.",
         sub: "Application Parsing Bug",
-        fix: "The problem's specific linkage to the overlay network's MTU reduction and firewall behavior points to a network-layer issue like PMTUD, not an application-level parsing defect.",
+        fix: "The application's JSON parser operates on the fully reassembled TCP stream at the user space level; it does not interact with network-layer packets or fragments.",
       },
     ],
     correctIndex: 1,

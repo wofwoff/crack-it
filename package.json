@@ -12,7 +12,8 @@
     "ios:sync": "npm run build && npm run ios:assets && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "mac:build": "vite build --base=./ && node scripts/build-mac-app.mjs",
-    "mac:open": "npm run mac:build && open build/mac/CrackIt.app"
+    "mac:open": "npm run mac:build && open build/mac/CrackIt.app",
+    "test:e2e": "node test/run-e2e.js"
   },
   "dependencies": {
     "@capacitor/cli": "^8.4.1",
@@ -25,6 +26,8 @@
     "vite": "6.4.2"
   },
   "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
     "sharp": "^0.34.5"
   }
 }

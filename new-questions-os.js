@@ -7,24 +7,24 @@ export const NEW_OS = [
     stem: "A service loads a 4GB log-indexing file by calling read() into a heap buffer at startup, which takes 6 seconds and uses 4GB of RSS even though any given request only touches a few KB of the file. A teammate suggests mmap()-ing the file instead and letting the OS manage paging. After the change, startup is near-instant and RSS stays low until pages are actually touched. Why does mmap() behave this way?",
     options: [
       {
-        text: "mmap() maps the file lazily into the page cache; pages are faulted in on first access instead of being copied up front",
+        text: "It maps the file address space into the process's page cache lazily, page faulting in data only as specific offsets are accessed.",
         sub: "Demand paging backs the mapping by the page cache",
         fix: "",
       },
       {
-        text: "mmap() only works on files smaller than physical RAM, so the 4GB file must have been truncated",
+        text: "It imposes a maximum file size restriction that matches physical RAM, forcing the file system to truncate excessive data ranges.",
         sub: "Size limit forces partial load",
-        fix: "mmap() can map files far larger than physical RAM — that's exactly the point. The mapping is virtual; only touched pages consume RAM.",
+        fix: "mmap() can map files much larger than physical memory because the mapping is purely virtual. Pages are loaded into RAM only when accessed.",
       },
       {
-        text: "mmap() runs the read in a background kernel thread so it finishes faster",
+        text: "It schedules asynchronous reading threads in the kernel to preload the file segments ahead of actual process instruction execution.",
         sub: "Async kernel-side read ahead",
-        fix: "The speedup isn't from backgrounding the same amount of work — it's that mmap() does almost no work upfront at all, since it just establishes a mapping rather than copying file contents into a buffer.",
+        fix: "mmap() does not run background threads to load the entire file. The latency savings come from establishing virtual references instead of copying data.",
       },
       {
-        text: "mmap() compresses the file in memory, so RSS stays low even after the whole file is read",
+        text: "It runs a background hardware compression sweep that minimizes the resident memory footprint of the mapped pages after allocation.",
         sub: "Transparent compression reduces resident size",
-        fix: "mmap() does not compress anything. RSS stays low because untouched pages were never faulted in, not because resident pages are smaller.",
+        fix: "mmap() does not compress memory pages. RSS remains low simply because untouched virtual pages are never allocated in physical memory.",
       },
     ],
     correctIndex: 0,
@@ -38,27 +38,42 @@ export const NEW_OS = [
     subject: "OS",
     concept: "Copy-on-Write fork()",
     difficulty: "medium",
-    stem: "A Python web worker process has 800MB RSS from a loaded ML model. The team forks 8 worker processes (a common pattern with Gunicorn's pre-fork model) to handle requests in parallel, expecting total memory usage near 6.4GB. Instead, `free -h` shows total usage barely above 900MB right after fork, then climbing slowly as workers run. What explains the low memory footprint immediately after forking?",
+    stem: `A pre-forking web server starts a master process that loads a large read-only ML model, consuming 800MB of memory. It then forks 8 worker processes. You run a process monitoring command and observe:
+
+\`\`\`bash
+$ ps -o pid,ppid,rss,cmd
+  PID  PPID    RSS CMD
+ 4101  4100 819200 gunicorn: master
+ 4102  4101 821440 gunicorn: worker_1
+ 4103  4101 820980 gunicorn: worker_2
+ 4104  4101 822120 gunicorn: worker_3
+...
+$ free -m
+              total        used        free      shared  buff/cache   available
+Mem:          16384         980       12540         800        2864       14500
+\`\`\`
+
+Although each of the 8 workers reports over 800MB of Resident Set Size (RSS), the host's actual memory utilization has only increased by about 180MB since the workers were spawned. Which mechanical behavior of the kernel's memory management subsystem accounts for this difference?`,
     options: [
       {
-        text: "fork() only duplicates the stack and registers, not the heap, so the model data was never copied to begin with",
+        text: "The fork system call allocates virtual memory only for thread stacks, omitting the parent heap segment from the child's address space to avoid upfront data replication.",
         sub: "Heap is excluded from the child's address space",
-        fix: "fork() gives the child a full logical copy of the parent's entire address space, including the heap — it's just that the underlying physical pages are shared via copy-on-write rather than immediately duplicated.",
+        fix: "The fork() system call duplicates the parent's entire address space, including the heap. The child has access to all parent heap data, but it is backed by the parent's physical pages until a write occurs.",
       },
       {
-        text: "Copy-on-write: child processes share the parent's physical pages read-only until either side writes, at which point only that page is duplicated",
+        text: "The child processes share the parent's physical page table mappings read-only, delaying physical duplication of each page until a write operation triggers a page fault.",
         sub: "Pages are duplicated lazily, only on write",
         fix: "",
       },
       {
-        text: "The 8 workers are actually still a single process internally; `free -h` is undercounting because Gunicorn uses green threads, not real fork()",
+        text: "The process manager groups the workers into a single execution context where all state is managed via shared thread buffers instead of real OS-level processes.",
         sub: "Misreported process model",
-        fix: "Gunicorn's pre-fork worker model uses real OS processes via fork(), not green threads — that's the whole point of the pattern, to get process-level isolation per worker.",
+        fix: "Pre-forking servers run separate OS-level processes, not threads or single contexts. The memory efficiency is due to kernel page sharing, not userspace runtime tricks.",
       },
       {
-        text: "Linux deduplicates identical pages across all processes automatically via KSM, regardless of how they were created",
+        text: "The kernel's background page merging daemon periodically scans the system RAM to identify and deduplicate duplicate blocks across processes with matching binary segments.",
         sub: "Kernel same-page merging scans and merges matching pages",
-        fix: "KSM is a real feature but it's opt-in, scans periodically, and isn't what's responsible for the immediate low memory right after fork() — that's copy-on-write, which applies instantly at fork time.",
+        fix: "While Kernel Samepage Merging (KSM) exists, it runs periodically as a background scanner and is not responsible for the immediate, zero-overhead sharing at fork time.",
       },
     ],
     correctIndex: 1,
@@ -72,27 +87,45 @@ export const NEW_OS = [
     subject: "OS",
     concept: "File Descriptor Limits / Leaks",
     difficulty: "medium",
-    stem: "A long-running ingestion service starts throwing `EMFILE: too many open files` after running for several days, even though it processes a steady, bounded request rate. `lsof -p <pid> | wc -l` shows the count climbing steadily over time and never dropping. Code review shows every request opens a file with `open()` to read a config snippet, and the success path calls `close()`. What is most likely happening?",
+    stem: `A high-throughput ingestion agent runs for several days before failing with:
+
+\`\`\`text
+Error: EMFILE: too many open files
+\`\`\`
+
+You inspect the file descriptors held by the process and see the following pattern:
+
+\`\`\`text
+$ lsof -p 20401
+COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF    NODE NAME
+ingest  20401 root    3r   REG   8,16       128 1004123 /app/config.json
+ingest  20401 root    4r   REG   8,16       128 1004123 /app/config.json
+ingest  20401 root    5r   REG   8,16       128 1004123 /app/config.json
+ingest  20401 root    6r   REG   8,16       128 1004123 /app/config.json
+...
+\`\`\`
+
+Every request handler opens \`config.json\` to parse settings. While the success path contains proper cleanup logic, the system eventually crashes under continuous load. What is the root cause?`,
     options: [
       {
-        text: "The OS is silently lowering the process's file descriptor limit over time due to memory pressure",
-        sub: "Dynamic rlimit adjustment under load",
-        fix: "The kernel does not silently shrink a process's rlimit based on memory pressure. The fd limit (ulimit -n / RLIMIT_NOFILE) is fixed unless explicitly changed by the process or an administrator.",
+        text: "The OS kernel dynamically reduces the process's file descriptor quota to reclaim page cache memory during periods of physical RAM pressure.",
+        sub: "Dynamic quota reduction",
+        fix: "The kernel never dynamically shrinks the process's file descriptor limits (RLIMIT_NOFILE) on its own; limits are fixed until changed by ulimit or setrlimit.",
       },
       {
-        text: "An exception path skips the close() call, so file descriptors leak on every failed request and accumulate until the per-process fd limit is hit",
+        text: "An error path triggers an exception that bypasses the cleanup block, preventing file descriptor reclamation and leading to exhaustion.",
         sub: "Unhandled error path never reaches cleanup",
         fix: "",
       },
       {
-        text: "TCP sockets in TIME_WAIT are consuming the descriptor table and crowding out file opens",
+        text: "The network layer fails to purge TCP connections in the TIME_WAIT state, causing orphaned sockets to occupy file descriptor entries.",
         sub: "Ephemeral socket exhaustion",
-        fix: "Sockets in TIME_WAIT are already closed from the application's perspective and don't hold an open fd in this process; the growth is tied to the per-request open()/close() pattern around file reads, not socket lifecycle.",
+        fix: "Sockets in TIME_WAIT are closed from the process's perspective and do not consume file descriptor table entries in the process's file table.",
       },
       {
-        text: "Each open() call is creating a new inode on disk, and the filesystem is running out of inodes",
+        text: "The local filesystem runs out of available inode indexes on disk, forcing the write stream to fail with an allocation limit error.",
         sub: "Inode exhaustion on the filesystem",
-        fix: "Opening an existing file for reading doesn't create a new inode, and EMFILE specifically signals a per-process open-file-descriptor limit, not filesystem inode exhaustion (which would surface as ENOSPC).",
+        fix: "EMFILE indicates the process-specific open file descriptor table is full. Filesystem inode exhaustion produces ENOSPC or ENFILE, not EMFILE.",
       },
     ],
     correctIndex: 1,
@@ -106,27 +139,38 @@ export const NEW_OS = [
     subject: "OS",
     concept: "Signal Handling",
     difficulty: "hard",
-    stem: "A Kubernetes deployment sets `terminationGracePeriodSeconds: 30`. On rolling deploys, the old pod is supposed to finish in-flight HTTP requests before exiting. Instead, logs show requests being cut off immediately when a new deploy starts, well before 30 seconds pass. The app's only shutdown logic is a `finally` block that runs when the process exits normally. What's the most likely cause?",
+    stem: `A Node.js server container is deployed on Kubernetes with a 30-second grace period. The app's logic includes a global try/finally block:
+
+\`\`\`javascript
+try {
+    startHttpServer();
+} finally {
+    console.log("Flushing pending metrics and closing DB connections...");
+    db.close();
+}
+\`\`\`
+
+During a rolling deployment, the container is stopped. However, logs show that running HTTP requests are terminated instantly, and the finally block's log message never appears. What explains this immediate termination?`,
     options: [
       {
-        text: "The process has no handler for SIGTERM, so the default action terminates it immediately instead of running any graceful-shutdown logic first",
+        text: "The process lacks an explicit SIGTERM signal handler, causing the kernel to apply the default signal disposition which kills the process instantly.",
         sub: "Default SIGTERM disposition is immediate termination",
         fix: "",
       },
       {
-        text: "The grace period only applies to liveness probes, not to the application process itself",
+        text: "The runtime engine suspends the execution pipeline as soon as any signal is received, preventing any further asynchronous event execution.",
         sub: "Misapplied grace period scope",
-        fix: "terminationGracePeriodSeconds governs how long Kubernetes waits between sending SIGTERM and SIGKILL to the container's main process — it isn't scoped to probes at all.",
+        fix: "The event loop is not frozen by signals; if a signal handler were registered, it would run normally on the event loop or block execution to invoke the callback.",
       },
       {
-        text: "Kubernetes is sending SIGKILL first instead of SIGTERM, which can never be caught or ignored",
+        text: "The orchestrator sends an unblockable SIGKILL signal immediately, ignoring the grace period setting because no liveness probe was configured.",
         sub: "Uncatchable signal sent prematurely",
-        fix: "Kubernetes sends SIGTERM first and only escalates to SIGKILL after the grace period expires. If shutdown is happening immediately, SIGTERM itself is the problem, not a premature SIGKILL — and SIGKILL specifically cannot be the issue if processes get to log anything at all in response to the signal.",
+        fix: "Kubernetes sends SIGTERM first and respects the grace period. SIGKILL is sent only if the container fails to exit after the grace period expires.",
       },
       {
-        text: "A `finally` block can never run in response to process termination, regardless of signal handling",
+        text: "The try-finally statement blocks are language-level constructs that do not execute if the process receives any signals during execution.",
         sub: "Cleanup blocks are signal-independent",
-        fix: "finally blocks do run on normal exception unwinding or process exit, but a signal like SIGTERM whose default disposition is to terminate the process doesn't go through normal control flow at all, so it bypasses finally — the issue is the missing handler, not finally being inherently broken.",
+        fix: "Finally blocks do run on normal exits or caught exceptions, but cannot execute if the process is terminated abruptly from outside by the OS before the stack is unwound.",
       },
     ],
     correctIndex: 0,
@@ -140,27 +184,34 @@ export const NEW_OS = [
     subject: "OS",
     concept: "OOM Killer",
     difficulty: "hard",
-    stem: "A Node.js API container keeps dying with no application-level error logs, no stack trace, no unhandled exception — it just stops, and `kubectl describe pod` shows `OOMKilled`. `dmesg` on the node around the time of the crash shows a line mentioning `Out of memory: Killed process` with the container's PID. The memory limit on the container is 512Mi, and a memory profiler shows usage was creeping toward that limit gradually over an hour. Why did the process die with no application-level exception at all?",
+    stem: `A Node.js API container running inside a Kubernetes cluster suddenly exits with exit code 137. There are no application stack traces or error logs. Running a node-level diagnostics command reveals the following log snippet:
+
+\`\`\`text
+[12045.678901] oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=docker,mems_allowed=0,oom_memcg=/kubepods/burstable/pod123,task=node,pid=14205,uid=1000
+[12045.678915] Memory cgroup out of memory: Killed process 14205 (node) total-vm:1248384kB, anon-rss:520192kB, file-rss:4096kB, shmem-rss:0kB
+\`\`\`
+
+What is the operational cause of this termination?`,
     options: [
       {
-        text: "The container's CPU limit was exceeded, causing Kubernetes to evict and restart the pod",
+        text: "The runtime engine encountered a memory allocation limit in the JavaScript heap, throwing a fatal system exception that bypassed the application's global try-catch blocks.",
         sub: "CPU throttling triggers eviction",
-        fix: "CPU limits cause throttling, not termination, and the explicit dmesg 'Out of memory' message and OOMKilled status both point specifically to a memory limit being hit, not CPU.",
+        fix: "Heap exhaustion inside Node.js/V8 leads to an in-process fatal error (e.g., 'JavaScript heap out of memory') printed to stderr, not an external cgroup OOM-kill event logged by the kernel.",
       },
       {
-        text: "A segmentation fault in a native Node.js addon crashed the process before it could log anything",
+        text: "The operating system detected a segmentation fault within a compiled native addon, triggering an immediate process dump and core generation.",
         sub: "Native code memory corruption",
-        fix: "A segfault would show a different kernel log signature (a SIGSEGV trap) and isn't what dmesg reported here — the explicit 'Out of memory: Killed process' message is the OOM killer's own log line, a distinct kernel mechanism from a segfault.",
+        fix: "A segmentation fault (SIGSEGV) is triggered by illegal memory access within the process and generates a core dump or stack trace, rather than an out-of-memory cgroup termination.",
       },
       {
-        text: "The kernel's OOM killer forcibly terminated the process due to memory limits, bypassing any chance for application-level error handling.",
+        text: "An external kernel mechanism terminated the process with a non-catchable signal because the memory utilization of the container exceeded its configured cgroup threshold.",
         sub: "External system memory termination",
         fix: "",
       },
       {
-        text: "Node.js threw an out-of-memory exception that was silently swallowed by a try/catch somewhere in the request handler",
+        text: "The container scheduler evicted the workload because the application process exceeded its allocated CPU shares, causing a thread scheduling deadlock.",
         sub: "Application-level exception suppressed",
-        fix: "A JS heap OOM inside the V8 engine would normally produce a fatal V8 error in stdout/stderr before the process dies, and is a different mechanism from a cgroup limit being exceeded — the dmesg OOM killer log specifically indicates the kernel terminated the process from outside, which a try/catch cannot intercept at all.",
+        fix: "Exceeding CPU limits causes the kernel to throttle the process (limit CPU cycles) but does not trigger process termination or SIGKILL. Cgroup OOM kills are memory-driven.",
       },
     ],
     correctIndex: 2,
@@ -174,27 +225,39 @@ export const NEW_OS = [
     subject: "OS",
     concept: "CPU Cache Locality / False Sharing",
     difficulty: "hard",
-    stem: "A multi-threaded counter library has each of 8 worker threads incrementing its own `int counter` in a global `int counters[8]` array, each thread only touching its own index, no locks involved. Profiling with `perf c2c` shows heavy cache-line contention, and the benchmark is far slower with 8 threads than with 1, despite there being no logical data dependency between threads. What's going on?",
+    stem: `You are optimizing a high-performance multithreaded statistics library. You write the following parallel increment logic:
+
+\`\`\`cpp
+int counters[8]; // Aligned contiguously in memory
+
+void worker_thread(int thread_id) {
+    for (int i = 0; i < 10000000; ++i) {
+        counters[thread_id]++;
+    }
+}
+\`\`\`
+
+Each thread executes on a separate core and accesses only its dedicated index. However, profiling shows CPU cycles are dominated by cache-line invalidation traffic, and the execution is slower than running sequentially. What physical mechanism causes this degradation?`,
     options: [
       {
-        text: "The operating system's memory management or scheduler is inadvertently serializing access to the array's memory pages, creating a bottleneck as threads contend for page-level access permissions.",
+        text: "The OS page directory enforces mutual exclusion on concurrent writes to adjacent memory locations inside the same physical page frame.",
         sub: "Scheduler-enforced serialization on arrays",
-        fix: "Modern operating systems and memory managers permit concurrent access to distinct memory locations within the same or different pages by multiple threads, provided there's no data dependency or explicit synchronization.",
+        fix: "The virtual memory system works at the page level (usually 4KB) and does not serialize or block concurrent writes to different parts of the same page.",
       },
       {
-        text: "False sharing: distinct counters are inadvertently placed within the same cache line, causing excessive cache coherence traffic among cores despite logical data independence.",
+        text: "Unrelated variables accessed by different cores sit on the same cache line, causing each write to invalidate the line in the other cores' caches.",
         sub: "Cache-coherence traffic from co-located unrelated data",
         fix: "",
       },
       {
-        text: "Frequent and scattered memory accesses by each thread are generating a high rate of Translation Lookaside Buffer misses, forcing costly page table walks and degrading overall memory access performance.",
+        text: "The pipeline execution unit serializes concurrent thread instructions when they reference the same base address in the stack pointer register.",
         sub: "Translation lookaside buffer pressure",
-        fix: "An 8-element integer array is very small and likely resides entirely within a single cache line and memory page. `perf c2c` specifically indicates cache-line contention, not TLB pressure or page walks.",
+        fix: "The CPU pipeline does not serialize instructions across different execution cores based on base memory offsets unless there is a true registers dependency.",
       },
       {
-        text: "The concurrent writes by multiple threads to the global array are leading to a classic data race condition, resulting in non-deterministic counter values and corrupted state due to unsynchronized access.",
+        text: "The hardware memory controller blocks concurrent writes to adjacent array elements to prevent bit flip corruption in the DRAM bank.",
         sub: "Concurrent writes to the same memory location",
-        fix: "Each thread accesses only its unique array element; there is no overlap in memory addresses being written, thus no data race on the values themselves. The issue is a performance degradation, not data corruption.",
+        fix: "The memory controller doesn't intervene to serialize concurrent writes to adjacent words; cache coherence protocols handle memory sync at the CPU level.",
       },
     ],
     correctIndex: 1,
@@ -242,27 +305,37 @@ export const NEW_OS = [
     subject: "OS",
     concept: "Syscall Overhead / User-Kernel Boundary",
     difficulty: "medium",
-    stem: "A log-shipping tool calls `write()` once per log line, sometimes thousands of times per second. `strace -c` shows the process spending a disproportionate amount of wall-clock time inside `write()` syscalls relative to the tiny amount of data each one transfers. Switching to buffering log lines in a userspace buffer and flushing with one `write()` every few hundred lines drops CPU usage significantly. Why does batching help here?",
+    stem: `A log-shipping daemon writes log entries to disk. Profiling the execution under heavy load reveals high CPU usage. Running an execution trace produces the following summary:
+
+\`\`\`text
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- -----------
+ 94.20    4.120531           2   2000000           write
+  3.15    0.137890          45      3000           openat
+  2.65    0.115901          38      3000           close
+\`\`\`
+
+When the daemon is modified to buffer the log lines in a local memory array and write them in chunks of 500 lines, the CPU consumption drops by over 80%. Why does this optimization yield such a significant improvement?`,
     options: [
       {
-        text: "strace itself is slowing down each write() call, and the real, unobserved program has no such overhead",
+        text: "It allows the OS block layer to bypass the buffer cache and perform direct-memory-access (DMA) operations directly to the physical storage device.",
         sub: "Observer effect from tracing",
-        fix: "strace does add some overhead while attached, but the underlying CPU-usage improvement from batching is measured independently after the change and holds true without strace attached — the syscall transition cost is real, not a tracing artifact.",
+        fix: "Buffered writes still go through the kernel's page/buffer cache unless the file is opened with O_DIRECT; batching does not change the caching layer usage.",
       },
       {
-        text: "Each syscall forces a transition from user mode to kernel mode (and back), which has fixed overhead independent of how much data is transferred, so making fewer, larger syscalls amortizes that fixed cost over more data",
+        text: "It minimizes the frequency of privilege mode transitions and execution context saves required to cross the user-kernel boundary.",
         sub: "Mode-switch cost is paid per call, not per byte",
         fix: "",
       },
       {
-        text: "The kernel rate-limits write() calls to prevent any single process from monopolizing I/O bandwidth",
+        text: "It prevents the kernel scheduler from prioritizing other concurrent processes, ensuring uninterrupted CPU time slices for the daemon.",
         sub: "Kernel-imposed syscall throttling",
-        fix: "There's no general per-syscall rate limiter in the kernel for write(); the overhead strace is showing is the fixed cost paid on every user-to-kernel transition, not artificial throttling.",
+        fix: "Batching writes doesn't alter scheduling priorities or lock the CPU; it simply reduces the CPU cycles spent executing kernel-user transitions.",
       },
       {
-        text: "write() is a blocking call that always waits for the data to be physically flushed to disk before returning, so fewer calls means less time waiting on disk",
+        text: "It avoids triggering synchronous block-level file allocation writes on the storage drive for each small update, reducing controller latency.",
         sub: "Synchronous disk flush per write()",
-        fix: "A normal write() to a regular file just copies data into the kernel's page cache and returns — it doesn't wait for the disk under normal (non-O_SYNC) conditions. The overhead here is the per-call user/kernel transition cost, not synchronous disk I/O.",
+        fix: "Standard write() calls are asynchronous with respect to disk I/O; they write to the page cache, so they do not block on physical disk allocation write.",
       },
     ],
     correctIndex: 1,
@@ -276,7 +349,18 @@ export const NEW_OS = [
     subject: "OS",
     concept: "Zombie Process Accumulation",
     difficulty: "medium",
-    stem: "A containerized batch-job runner spawns short-lived child processes via `fork()`/`exec()` for each job, but never calls `wait()` or `waitpid()` on them after they finish. Over a few days, `ps aux` inside the container shows a growing number of processes in state `Z` (defunct), and eventually the container hits its PID limit and can't fork new processes at all. Why do these terminated processes stick around instead of disappearing?",
+    stem: `A containerized batch-job runner spawns short-lived child processes. After running for several days, the container fails to fork new processes, and you run a diagnostic check:
+
+\`\`\`text
+$ ps aux
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root     12401  0.0  0.0      0     0 ?        Z    01:22   0:00 [job_worker] <defunct>
+root     12405  0.0  0.0      0     0 ?        Z    01:23   0:00 [job_worker] <defunct>
+root     12409  0.0  0.0      0     0 ?        Z    01:24   0:00 [job_worker] <defunct>
+...
+\`\`\`
+
+Why do these terminated processes remain in the system table and consume PID resources?`,
     options: [
       {
         text: "The kernel's process scheduler is actively deprioritizing the cleanup routines for short-lived, finished processes in favor of allocating resources to active jobs.",

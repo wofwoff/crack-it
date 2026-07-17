@@ -75,24 +75,24 @@ export const NEW_DBMS = [
     stem: "A Postgres instance running on a cloud VM loses power mid-write — the data files on disk are only partially updated. After the VM reboots and Postgres restarts, the database comes back up with all committed transactions intact and no corruption. The actual table/index files were never fsynced before the crash. How is this possible?",
     options: [
       {
-        text: "Write-ahead logging ensures transaction durability; WAL segments are flushed to disk before commit and replayed on recovery.",
-        sub: "WAL-based durability and crash recovery",
+        text: "Changes are appended to a sequential log flushed to persistent storage before modified data pages are written to the tables.",
+        sub: "Write-ahead log flushing constraint",
         fix: "",
       },
       {
-        text: "The autovacuum background process automatically detected and repaired corrupted data pages using internal statistics.",
-        sub: "Autovacuum's repair capabilities",
-        fix: "Autovacuum is responsible for garbage collection and statistics updates; it does not perform crash recovery or reconstruct damaged data pages due to power loss.",
+        text: "The database runs a background auto-repair process that detects mismatched page checksums and corrects them using parity blocks.",
+        sub: "Checksum-based page recovery",
+        fix: "Automatic repair processes (like Postgres autovacuum or InnoDB purge) handle space reclamation and table statistics, not physical crash recovery or reconstructing partially written pages after sudden power failure.",
       },
       {
-        text: "Postgres reconstructs table data by re-executing query logs against a consistent backup snapshot after the crash.",
-        sub: "Logical replay from query history",
-        fix: "Postgres's recovery mechanism relies on physical log records (WAL), not a log of SQL queries. This scenario does not imply the availability or use of a separate backup.",
+        text: "The operating system guarantees that modified table pages in the kernel cache survive power outages via transactional file systems.",
+        sub: "OS page cache persistence",
+        fix: "Volatile operating system page caches do not survive power loss; transactional file systems protect metadata, but database engines must manage their own transactional guarantees to avoid data loss.",
       },
       {
-        text: "The operating system's page cache maintained the modified data in volatile memory, which was later written to disk.",
-        sub: "Volatile page cache persistence",
-        fix: "The OS page cache is volatile memory; a full power loss wipes its contents. Any partially updated data files would require a dedicated recovery mechanism, not a volatile cache.",
+        text: "The transaction manager delays committing operations until table-level locks are released and data pages are fully written.",
+        sub: "Lock-release synchronization",
+        fix: "Delaying commits until data pages are fully written (force policy) is extremely slow and doesn't prevent corruption if a power loss occurs mid-write; database engines instead use a no-force policy backed by logging.",
       },
     ],
     correctIndex: 0,
@@ -109,22 +109,22 @@ export const NEW_DBMS = [
     stem: "A Rails-style ORM endpoint lists 50 blog posts along with each post's author name. The endpoint works fine in dev with 5 seed posts but takes 4+ seconds in production with 50 posts. The query log shows 1 query to fetch the posts, followed by 50 separate queries, each fetching one author by id. What's the fix?",
     options: [
       {
-        text: "Eager-load (join or batch-fetch) authors alongside posts in a single query",
+        text: "Configure the data mapper to eager-load the relation using a join or a batched primary key lookup query.",
         sub: "Replaces 50 lookups with one JOIN or one IN(...) batch query",
         fix: "",
       },
       {
-        text: "Move the author lookups to a read replica to parallelize them",
+        text: "Distribute the sequential database queries across multiple read replicas to execute them in parallel.",
         sub: "Distributes the 50 queries across replicas",
         fix: "Spreading the same 50 round-trips across more database nodes still pays per-query network and planning overhead 50 times over; it reduces load on any single replica but doesn't fix the underlying access pattern.",
       },
       {
-        text: "Cache the entire posts list in Redis for 24 hours",
+        text: "Serialize the resulting payload and cache it in a key-value store with a short time-to-live expiration.",
         sub: "Avoids hitting the database on repeat requests",
         fix: "Caching can mask the symptom for repeat requests, but the first request (and every cache miss) still triggers the same 51-query pattern, and it doesn't fix the inefficient access pattern itself.",
       },
       {
-        text: "Add an index on posts.author_id",
+        text: "Create a database index on the foreign key column to optimize the individual secondary lookup queries.",
         sub: "Speeds up each lookup query",
         fix: "An index would make each of the 50 author lookups faster individually, but you'd still be paying 50 separate network round-trips; the real problem is query count, not per-query speed.",
       },
@@ -140,25 +140,31 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Schema Migration Safety",
     difficulty: "hard",
-    stem: "A team runs `ALTER TABLE users ADD COLUMN plan_tier TEXT NOT NULL DEFAULT 'free'` against a Postgres 10 production table with 80 million rows during business hours. The migration takes an exclusive lock and the table becomes completely unavailable for writes and reads for several minutes, causing an outage. What is the safest way to have made this change?",
+    stem: `A team runs the following migration statement against a Postgres 10 production table with 80 million rows during business hours:
+
+\`\`\`sql
+ALTER TABLE users ADD COLUMN plan_tier TEXT NOT NULL DEFAULT 'free';
+\`\`\`
+
+The database acquires an exclusive lock, and the table becomes completely unavailable for reads and writes for several minutes, causing a production outage. What is the safest way to have made this change?`,
     options: [
       {
-        text: "Create a second table with the new schema and have the application dual-write to both until the migration finishes",
+        text: "Create a duplicate table with the new schema and dual-write to both tables until they are fully synchronized.",
         sub: "Manual dual-write shadow table",
         fix: "This pattern (used for genuinely incompatible schema changes) is significantly more operationally complex and risky than necessary here — a NOT NULL column with a default is a well-understood case with a much simpler safe path.",
       },
       {
-        text: "Wrap the ALTER TABLE in a transaction so it can be rolled back if it's slow",
+        text: "Wrap the migration query in a database transaction block so it can be rolled back immediately if execution stalls.",
         sub: "Transactional DDL as a safety net",
         fix: "A transaction makes the change atomic and rollback-able if it fails, but it doesn't reduce lock duration or table unavailability while the statement is running — Postgres still has to rewrite the table under an exclusive lock either way.",
       },
       {
-        text: "Add the column as nullable with no default first, backfill the value in batches, then add a NOT NULL constraint (or default) afterward",
+        text: "Add the column as nullable with no default, backfill values in batches, then apply the NOT NULL constraint.",
         sub: "Splits the change into a cheap DDL step plus incremental backfill",
         fix: "",
       },
       {
-        text: "Run the same ALTER TABLE statement, but during a lower-traffic window",
+        text: "Execute the same migration statement during a low-traffic window when concurrent query activity is at its lowest.",
         sub: "Same lock, less concurrent traffic",
         fix: "This reduces the blast radius but not the root cause: on Postgres versions before 11, adding a column with a non-null default still requires rewriting every existing row while holding an exclusive lock, so the table is still unavailable for the duration, just to fewer users.",
       },
@@ -174,25 +180,34 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Optimistic Locking",
     difficulty: "medium",
-    stem: "Two warehouse employees open the same inventory record (quantity: 10) in a web app at the same time. Employee A ships 3 units and saves; the app sets quantity to 7. Employee B, still looking at the stale quantity: 10, ships 4 units and saves, setting quantity to 6 — silently erasing A's update. The team adds a `version` integer column and requires `UPDATE ... WHERE id = ? AND version = ?`, rejecting the write if zero rows match. What problem does this solve, and what must the app now do?",
+    stem: `Two warehouse employees open the same inventory record (quantity: 10) in a web app at the same time. Employee A ships 3 units and saves; the app sets quantity to 7. Employee B, still looking at the stale quantity: 10, ships 4 units and saves, setting quantity to 6 — silently erasing A's update.
+
+To resolve this, the team adds a \`version\` integer column and changes the write operation to use:
+
+\`\`\`sql
+UPDATE inventory SET quantity = ?, version = version + 1
+WHERE id = ? AND version = ?;
+\`\`\`
+
+The query is rejected if zero rows match. What problem does this solve, and what must the app now do?`,
     options: [
       {
-        text: "It upgrades the transaction to Serializable isolation automatically",
+        text: "It forces the database engine to upgrade the transaction isolation level to serializable automatically.",
         sub: "Isolation level change",
         fix: "Adding a version column and conditioning the UPDATE on it is an application-level (optimistic) concurrency check; it doesn't change the database's transaction isolation level at all.",
       },
       {
-        text: "It enforces referential integrity between the inventory table and the orders table",
+        text: "It enforces referential integrity constraints between the inventory table and the orders tracking table.",
         sub: "Foreign key style protection",
         fix: "No foreign key relationship is involved here; the version column protects against concurrent updates to the same row, not relationships between tables.",
       },
       {
-        text: "It prevents deadlocks by avoiding row-level locks entirely; the app doesn't need to change anything else",
+        text: "It prevents transaction deadlocks by avoiding locks, requiring no extra error handling logic in the app.",
         sub: "Lock-free by design, no app changes needed",
         fix: "Deadlocks weren't the problem described — this scenario never had two transactions waiting on each other's locks. And the app does need to change: it must detect the zero-rows-affected case and handle it (retry or surface a conflict), otherwise B's write would just silently disappear instead of overwriting A's.",
       },
       {
-        text: "It prevents a lost update by detecting that the row changed since it was read; the app must check the affected-row count and retry or reject B's stale write",
+        text: "It detects lost updates by validating the version, requiring the app to check row counts and handle retries.",
         sub: "Version mismatch signals a conflicting concurrent write",
         fix: "",
       },
@@ -208,27 +223,33 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Full-Text Search vs LIKE",
     difficulty: "medium",
-    stem: "A support ticket search box runs `SELECT * FROM tickets WHERE body LIKE '%refund%'` against a table with 2 million rows. There's a B-tree index on `body`, but EXPLAIN shows a sequential scan, and the query takes 3+ seconds. The team wants fast keyword search across ticket bodies, including matches like 'refunding' and 'refunded'. What should they do?",
+    stem: `A support ticket search box runs the following query against a table with 2 million rows:
+
+\`\`\`sql
+SELECT * FROM tickets WHERE body LIKE '%refund%';
+\`\`\`
+
+There is a B-tree index on \`body\`, but the query execution plan shows a full table scan and takes over 3 seconds. The application must support fast keyword search that also matches related word forms (e.g., "refunding", "refunded"). How should this be resolved?`,
     options: [
       {
-        text: "Increase work_mem so the sequential scan runs faster",
-        sub: "More memory for the scan",
-        fix: "work_mem affects sort/hash operation memory, not sequential scan throughput; it wouldn't turn a 2-million-row scan into a fast lookup, and it doesn't address matching word forms like 'refunding' either.",
+        text: "Increase the session's work_mem allocation to allow the database to cache the table scans in RAM.",
+        sub: "Increase memory buffer limits",
+        fix: "work_mem affects sort and hash operations in RAM, not sequential scan throughput; it does not prevent a table scan or resolve the inability to match word forms like 'refunding'.",
       },
       {
-        text: "Implement a full-text search indexing solution for the `body` column",
-        sub: "Dedicated full-text indexing",
+        text: "Convert the target field to normalized lexemes and index them using a Generalized Inverted Index.",
+        sub: "Lexeme tokenization and GIN index lookup",
         fix: "",
       },
       {
-        text: "Add `body` to a composite index alongside `ticket_id`",
-        sub: "Multi-column B-tree index",
-        fix: "A composite B-tree index still can't be used to satisfy a `LIKE '%refund%'` predicate, because the wildcard on both sides means there's no usable prefix to seek on, regardless of which other columns are in the index.",
+        text: "Create a composite B-tree index combining the text field with the primary key to enable index-only scans.",
+        sub: "Composite index covering",
+        fix: "A composite B-tree index is useless here because a double-wildcard LIKE pattern ('%refund%') lacks a starting prefix, meaning the optimizer cannot perform index range scans and must read all rows.",
       },
       {
-        text: "Rebuild the same B-tree index with a higher fillfactor",
-        sub: "Tune index storage density",
-        fix: "Fillfactor affects how much free space is reserved on index pages for future updates; it has no effect on whether a leading-wildcard LIKE pattern can use a standard B-tree index at all.",
+        text: "Rebuild the existing B-tree index with a reduced fillfactor to improve internal node block density.",
+        sub: "Adjust index storage fillfactor",
+        fix: "Changing the fillfactor adjusts how much space is left on index pages for updates to reduce page splits; it cannot enable a B-tree index to support double-wildcard substring scans or handle word stemming.",
       },
     ],
     correctIndex: 1,
@@ -276,25 +297,31 @@ export const NEW_DBMS = [
     subject: "DBMS",
     concept: "Covering Indexes & EXPLAIN ANALYZE",
     difficulty: "hard",
-    stem: "A query `SELECT order_id, status FROM orders WHERE customer_id = 42` runs against a table with an index on `customer_id`. EXPLAIN ANALYZE shows 'Index Scan using idx_customer_id' followed by a 'Heap Fetches: 8000' line, and the query is slower than expected for returning only a few hundred rows worth of data. What change would turn this into an index-only scan and cut the heap fetches?",
+    stem: `A query runs against a table with an index on \`customer_id\`:
+
+\`\`\`sql
+SELECT order_id, status FROM orders WHERE customer_id = 42;
+\`\`\`
+
+EXPLAIN ANALYZE shows an 'Index Scan using idx_customer_id' followed by a 'Heap Fetches: 8000' line, and the query is slower than expected. Which index configuration would eliminate the heap fetches?`,
     options: [
       {
-        text: "Create a covering index, for instance, `(customer_id) INCLUDE (status)`, or a composite index `(customer_id, status)`.",
+        text: "Modify the index on customer_id to include the status column, or create a composite index on both columns.",
         sub: "Index contains all needed query columns to avoid heap lookups.",
         fix: "",
       },
       {
-        text: "Switch the index on `customer_id` from a B-tree to a hash index for optimized equality lookups.",
+        text: "Rebuild the current B-tree index as a hash index on customer_id to perform faster direct key match lookups.",
         sub: "Utilize a hash structure for faster direct matches.",
         fix: "Hash indexes do not support index-only scans and cannot store additional columns like `status`, preventing the elimination of heap fetches.",
       },
       {
-        text: "Extend the `WHERE` clause to also filter on `status`, potentially reducing the initial result set size.",
+        text: "Re-phrase the search query to include status filters in the WHERE clause to restrict the returned row count.",
         sub: "Narrow down rows with an additional filter condition.",
         fix: "Filtering on `status` reduces row count, but doesn't change how `status` is retrieved if not in the index, thus not eliminating heap fetches.",
       },
       {
-        text: "Execute `VACUUM FULL` on the `orders` table to reclaim space and update statistical data thoroughly.",
+        text: "Run a full database vacuum command on the orders table to update index statistics and reclaim fragmented pages.",
         sub: "Perform table-level maintenance and compaction.",
         fix: "VACUUM FULL compacts the table and improves statistics but does not add columns to an index required for index-only scans.",
       },
@@ -313,22 +340,22 @@ export const NEW_DBMS = [
     stem: "A mobile app calls POST /charge to bill a customer's card. On a flaky connection, the client times out waiting for a response and automatically retries the same request. The server actually processed the first request successfully — the customer is charged twice for one order. The team wants to fix this without making the client wait longer or removing retries (retries are needed for real transient failures). What should they add?",
     options: [
       {
-        text: "Increase the client's request timeout so it never times out",
+        text: "Adjust the client's request timeout limits to be indefinitely long so connections are never terminated.",
         sub: "Avoid triggering the retry at all",
         fix: "A longer timeout reduces how often this happens but doesn't eliminate the race — the server can still complete a charge just after the client gives up and retries (or the response can be lost in transit even if processing finished), so duplicate charges remain possible.",
       },
       {
-        text: "Wrap the charge logic in a database transaction with Serializable isolation",
+        text: "Wrap the transaction in serializable isolation so concurrent charges on the same card are serialised.",
         sub: "Strongest isolation level",
         fix: "Serializable isolation prevents anomalies between concurrent transactions reading/writing the same data, but the two retried requests are two separate, sequential transactions, each fully valid on its own — isolation level has no way to know they represent 'the same logical charge attempt.'",
       },
       {
-        text: "Make the charge endpoint a GET request instead of POST so it can be safely retried",
+        text: "Modify the card charging endpoint to use GET instead of POST so that the retries are natively idempotent.",
         sub: "Use a 'safe' HTTP method",
         fix: "Changing the HTTP verb doesn't change what the operation does server-side — charging a card is inherently a side-effecting write, and GET semantics don't make a non-idempotent operation idempotent; this also misuses GET for a mutating action.",
       },
       {
-        text: "Client sends a unique idempotency key per charge, allowing the server to deduplicate retries.",
+        text: "Require the client to submit a unique request identifier with the payload to allow deduplication on the server.",
         sub: "Client key for server deduplication.",
         fix: "",
       },

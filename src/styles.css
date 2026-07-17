@@ -1168,7 +1168,9 @@ h1,
   animation: reveal-flow 520ms var(--ease-flow) 650ms both;
 }
 
-.explanation-body p {
+.explanation-body p,
+.explanation-body .explanation-text,
+.pro-tip-card .explanation-text {
   margin: 0;
   color: #3a3230;
   font-size: 14px;
@@ -1188,7 +1190,8 @@ h1,
 }
 
 .callout.success .eyebrow,
-.callout.success p {
+.callout.success p,
+.callout.success .explanation-text {
   color: #2a4a38;
 }
 
@@ -1209,7 +1212,9 @@ h1,
 }
 
 .callout.neutral .eyebrow,
-.callout.neutral p {
+.callout.neutral p,
+.callout.neutral .explanation-text,
+.callout.neutral .lesson-paragraph {
   color: var(--ink);
 }
 
@@ -1364,6 +1369,8 @@ h1,
 }
 
 .lesson-paper p,
+.lesson-paper .lesson-paragraph,
+.lesson-paper .lesson-body-text,
 .summary-paper p {
   color: #3a3230;
   font-size: 15px;
@@ -1640,7 +1647,8 @@ h1,
   font-size: 21px;
 }
 
-.dsa-teaser p:last-child {
+.dsa-teaser p:last-child,
+.dsa-teaser div.teaser-stem-text {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -4338,6 +4346,10 @@ input[type="range"] {
   line-height: 1.8;
   color: #3b332b;
   white-space: pre;
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
 }
 
 .cloze-input {
@@ -4750,5 +4762,41 @@ input[type="range"] {
 .ios-native .question-context {
   flex-direction: row !important;
   align-items: center !important;
+}
+
+/* ----------------------------------------------------------------------------
+   MCQ CODE AND BLOCK CODE FORMATTING
+   ---------------------------------------------------------------------------- */
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  background-color: var(--line-soft);
+  color: var(--accent-dark);
+  padding: 2px 5px;
+  border-radius: 4px;
+  word-break: break-word;
+}
+
+pre.code-block {
+  background-color: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+pre.code-block code {
+  font-family: inherit;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--ink);
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  white-space: pre;
+  word-break: normal;
 }
 

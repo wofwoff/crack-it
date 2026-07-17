@@ -4,27 +4,43 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Interface Segregation Principle",
     difficulty: "medium",
-    stem: "A Worker interface declares work(), eat(), and sleep(). A RobotWorker class implements Worker but throws UnsupportedOperationException inside eat() and sleep() because robots don't need them. New hires keep \"forgetting\" to implement those methods properly, and code reviewers keep flagging the empty/throwing stubs. What's the real design problem?",
+    stem: `You are review-checking a class design where some implementations throw exceptions for unsupported operations:
+
+\`\`\`typescript
+interface Worker {
+  work(): void;
+  eat(): void;
+  sleep(): void;
+}
+
+class RobotWorker implements Worker {
+  work() { /* logic */ }
+  eat() { throw new UnsupportedError("Robots don't eat"); }
+  sleep() { throw new UnsupportedError("Robots don't sleep"); }
+}
+\`\`\`
+
+Reviewers keep flagging these stub implementations. Which structural refactoring resolves the core design flaw without leaving empty or error-throwing stubs?`,
     options: [
       {
-        text: "Robot inherits from Worker, violating Liskov Substitution",
-        sub: "Subtype can't honor the base contract",
-        fix: "There's no inheritance hierarchy being substituted here, just an interface implementation. Renaming this LSP misses the actual fix: the interface itself is bloated.",
+        text: "Apply the Liskov Substitution Principle by converting the interface into an abstract class with base fallback implementations.",
+        sub: "Inherit default behaviors instead of throwing exceptions",
+        fix: "Providing dummy default methods in a base class only hides the bloat; it does not solve the problem of subclasses inheriting methods they cannot conceptually perform.",
       },
       {
-        text: "This is a Single Responsibility violation — RobotWorker is doing too much",
-        sub: "One class, multiple reasons to change",
-        fix: "RobotWorker has exactly one responsibility (working); the problem is being forced to implement unrelated methods from an overly broad interface, not doing too many jobs itself.",
+        text: "Apply the Single Responsibility Principle by dividing the RobotWorker class into separate subclasses for each behavior.",
+        sub: "Refactor the concrete implementation to reduce class scope",
+        fix: "RobotWorker already has a single responsibility. The issue is that it is forced to implement a bloated interface contract with behaviors it does not support.",
       },
       {
-        text: "The Worker interface is too fat and should be split into Workable, Eatable, Sleepable",
-        sub: "Clients shouldn't be forced to depend on methods they don't use",
+        text: "Decompose the broad contract into smaller role-oriented interfaces so that clients only implement methods they actually require.",
+        sub: "Segregate interface boundaries based on client usage",
         fix: "",
       },
       {
-        text: "RobotWorker needs a private eat() and sleep() to hide the unused methods",
-        sub: "Encapsulation hides the irrelevant behavior",
-        fix: "Interface methods can't be made private in most OOP languages, and even if they could, RobotWorker would still be forced to implement methods it conceptually doesn't have.",
+        text: "Use the Adapter pattern to encapsulate the RobotWorker behind a wrapper that intercepts and swallows the unsupported method calls.",
+        sub: "Hide unsupported operations at the client call site",
+        fix: "Using an adapter to swallow errors only masks the design smell at runtime and does not address the fundamental issue of a bloated interface contract.",
       },
     ],
     correctIndex: 2,
@@ -38,27 +54,42 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Dependency Injection",
     difficulty: "medium",
-    stem: "An OrderService class has the line `this.emailer = new SmtpEmailer(SMTP_CONFIG)` inside its constructor. Unit tests for OrderService keep failing in CI because they try to make real network calls to an SMTP server. What change fixes this without altering OrderService's actual order logic?",
+    stem: `You are writing unit tests for a transaction processing class, but tests are failing in CI because they attempt to open real socket connections to an external server:
+
+\`\`\`javascript
+class OrderService {
+  constructor() {
+    this.emailer = new SmtpEmailer(SMTP_CONFIG);
+  }
+  
+  processOrder(order) {
+    // business logic
+    this.emailer.send("order processed");
+  }
+}
+\`\`\`
+
+How should this coupling be refactored to make OrderService unit-testable in isolation?`,
     options: [
       {
-        text: "Make SmtpEmailer a singleton so only one instance is ever created",
-        sub: "Reduce object creation overhead",
-        fix: "A singleton still hard-codes OrderService's dependency on the real SMTP implementation; tests would still hit the network through the shared instance.",
+        text: "Convert the SmtpEmailer class into a thread-safe Singleton to ensure that only a single database/socket connection is established.",
+        sub: "Share a single connection instance globally",
+        fix: "Making SmtpEmailer a singleton does not resolve the hard-coded coupling; the OrderService constructor still instantiates and binds to the real network service.",
       },
       {
-        text: "Wrap the SmtpEmailer constructor call in a try/catch so test failures don't propagate",
-        sub: "Swallow the network error during tests",
-        fix: "Swallowing the error hides the real problem — tests would pass without actually verifying email behavior, and the hard dependency on SmtpEmailer remains.",
+        text: "Wrap the instantiation of the SmtpEmailer in a conditional branch that checks a global environment variable like process.env.TEST_MODE.",
+        sub: "Vary behavior inside the constructor based on configuration",
+        fix: "Injecting test environment flags into production code couples it to test environments and complicates runtime configuration.",
       },
       {
-        text: "Pass an emailer dependency into OrderService's constructor instead of constructing SmtpEmailer internally",
-        sub: "Inject the dependency so tests can supply a fake/mock",
+        text: "Accept an abstract notifier instance as a parameter in the constructor, shifting the responsibility of instantiation to the caller.",
+        sub: "Delegate collaborator creation outward to decouple implementation details",
         fix: "",
       },
       {
-        text: "Add a static mockMode flag to SmtpEmailer that no-ops network calls when set",
-        sub: "Branch internally based on test context",
-        fix: "This couples SmtpEmailer's production code to test concerns and still leaves OrderService hard-wired to one concrete class, which is the actual issue.",
+        text: "Subclass OrderService with a MockOrderService that overrides the emailer property to use a dummy mock object in the test suite.",
+        sub: "Override concrete properties in a test-specific subclass",
+        fix: "Subclassing the system under test to override private collaborators is brittle and fails if the base constructor changes or runs network logic.",
       },
     ],
     correctIndex: 2,
@@ -72,27 +103,33 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Builder Pattern",
     difficulty: "medium",
-    stem: "A Pizza class constructor takes 9 parameters: size, crust, cheese, sauce, and five optional toppings, most of which are usually null/false. Call sites are riddled with `new Pizza(\"large\", \"thin\", true, \"tomato\", false, false, true, false, null)` and reviewers can't tell which boolean means what. What change addresses this most directly?",
+    stem: `You are refactoring a class constructor that has become error-prone due to multiple sequential boolean flags and optional parameters:
+
+\`\`\`javascript
+const pizza = new Pizza("large", "thin", true, "tomato", false, false, true, false, null);
+\`\`\`
+
+Call sites are difficult to read and prone to positional errors. What pattern solves this by enabling named, step-by-step configuration?`,
     options: [
       {
-        text: "Use a PizzaBuilder with chained methods like withSize().withCrust().addTopping() ending in build()",
-        sub: "Construct the object step by step with named, optional calls",
+        text: "Introduce a separate creator class that exposes chainable methods for configuring each property, returning the built instance at the end.",
+        sub: "Construct complex objects step-by-step with named method calls",
         fix: "",
       },
       {
-        text: "Split Pizza into five separate topping subclasses",
-        sub: "One subclass per topping combination",
-        fix: "This creates combinatorial subclass explosion for what are really optional construction parameters, and still doesn't make any single call site readable.",
+        text: "Create specialized subclasses for each permutation of the configuration parameters to isolate the logic for different scenarios.",
+        sub: "Leverage class inheritance to represent combinations of settings",
+        fix: "This leads to combinatorial subclass explosion and does not simplify the client's instantiating call site.",
       },
       {
-        text: "Make all 9 fields public so callers can set only what they need after a no-arg constructor",
-        sub: "Skip the constructor, assign fields directly",
-        fix: "This leaves Pizza in a partially-constructed, unvalidated state between the no-arg call and the field assignments, and breaks encapsulation entirely.",
+        text: "Expose all class properties as public fields so that clients can set them directly on an empty instance after creation.",
+        sub: "Allow direct property modification on mutable fields",
+        fix: "Exposing public fields destroys encapsulation and leaves the object in a partially-constructed, invalid state during instantiation.",
       },
       {
-        text: "Convert Pizza into an abstract class with a template method for assembly",
-        sub: "Define the construction skeleton, let subclasses fill steps",
-        fix: "Template Method standardizes an algorithm's steps across subclasses; it doesn't address the unreadable, error-prone multi-parameter constructor call sites.",
+        text: "Apply the Template Method pattern to define a fixed skeleton of object assembly steps that subclasses override.",
+        sub: "Coordinate construction steps using subclass methods",
+        fix: "Template Method controls an algorithm's execution order; it does not resolve readability issues of long, positional parameter lists.",
       },
     ],
     correctIndex: 0,
@@ -106,32 +143,42 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Decorator Pattern",
     difficulty: "hard",
-    stem: "A base Coffee class has a cost() method. Product wants to support any combination of milk, caramel, and extra shot add-ons, each adding its own cost, and combinations need to be chosen at runtime per order (not known at compile time). A junior dev proposes subclasses: CoffeeWithMilk, CoffeeWithMilkAndCaramel, CoffeeWithMilkAndCaramelAndExtraShot, etc. What pattern better fits the runtime, combinable nature of these add-ons?",
+    stem: `You are designing a pricing calculation system for a coffee shop. Customers can order a base coffee and combine any number of optional add-ons (e.g., milk, caramel, extra shot). Since options are combinable at runtime, creating static subclasses for every permutation would cause subclass explosion. Which pattern allows wrapping the base coffee in optional layers to dynamically compute the total cost?`,
     options: [
       {
-        text: "Singleton — ensure only one Coffee instance is ever created per order",
-        sub: "Control instance count",
-        fix: "Singleton restricts instantiation to one instance globally or per key; it says nothing about composing optional add-on behavior, which is the actual requirement here.",
+        text: "Use a centralized Factory class that parses the user's selected configuration options and instantiates the matching subclass.",
+        sub: "Consolidate the instantiation logic of all permutations",
+        fix: "A factory only moves the construction decision to another class; it does not solve the combinatorial explosion of subclasses.",
       },
       {
-        text: "Factory — a CoffeeFactory creates the right subclass based on an order configuration object",
-        sub: "Centralize object creation logic",
-        fix: "A factory still needs a concrete class for every combination to return, so it doesn't remove the combinatorial subclass explosion — it just moves the if/else into the factory.",
+        text: "Apply the Strategy pattern, where the base subscription accepts a collection of strategy objects to evaluate at runtime.",
+        sub: "Delegate the cost calculations to interchangeable helper classes",
+        fix: "Strategy is designed to switch a single algorithm at runtime; wrapping objects recursively to stack behavioral layers is better suited for other patterns.",
       },
       {
-        text: "Decorator — wrap a Coffee in MilkDecorator, CaramelDecorator, etc., each adding cost and delegating the rest",
-        sub: "Stack behavior around an object at runtime without subclassing every combination",
+        text: "Apply a structural pattern that wraps the core object in wrapper instances sharing the same interface, each adding its own cost layer.",
+        sub: "Attach additional responsibilities dynamically using object composition",
         fix: "",
       },
       {
-        text: "Template Method — define a fixed cost() algorithm skeleton that subclasses fill in",
-        sub: "Standardize the steps of cost calculation",
-        fix: "Template Method fixes the shape of an algorithm across subclasses but still requires one subclass per variant; it doesn't solve runtime composability of independent add-ons.",
+        text: "Define the calculation steps using the Template Method pattern, letting subclasses determine the cost of each individual feature.",
+        sub: "Enforce a fixed sequence of calculations in a parent class",
+        fix: "Template Method relies on inheritance and does not allow users to combine arbitrary features dynamically at runtime.",
       },
     ],
     correctIndex: 2,
     proTip: "Whenever you catch yourself about to write a subclass for every possible combination of optional features, stop and ask whether each feature could instead be a wrapper that adds its bit of behavior and delegates the rest.",
-    lesson: "The Decorator pattern attaches additional responsibilities to an object dynamically by wrapping it in objects that share its interface, each adding behavior before/after delegating to the wrapped object. For combinable, runtime-chosen add-ons like milk, caramel, and extra shot, decorators let you compose `new ExtraShotDecorator(new CaramelDecorator(new MilkDecorator(new Coffee())))` instead of writing a subclass for every combination, which is exactly the inheritance-explosion problem the junior dev's proposal runs into.",
+    lesson: `The Decorator pattern attaches additional responsibilities to an object dynamically by wrapping it in objects that share its interface, each adding behavior before/after delegating to the wrapped object. For combinable, runtime-chosen add-ons, decorators let you compose nested instances like:
+
+\`\`\`javascript
+const order = new ExtraShotDecorator(
+  new CaramelDecorator(
+    new MilkDecorator(new Coffee())
+  )
+);
+\`\`\`
+
+This avoids writing a subclass for every combination, solving the combinatorial inheritance-explosion problem.`,
     remember: "Decorator = wrap, don't subclass, when optional behaviors need to combine freely at runtime.",
     interviewAnswer: "Subclassing every combination of milk, caramel, and extra shot is going to blow up combinatorially — three independent add-ons already means up to eight subclasses, and it gets worse as more add-ons are added. The Decorator pattern is the better fit here: each add-on becomes a decorator that wraps a Coffee, implements the same cost() interface, adds its own price, and delegates to the wrapped object for the rest. At order time you just wrap the base Coffee in whatever decorators the order needs, in any combination, without ever touching the class hierarchy — that's the key benefit over subclassing, the composition happens at runtime, not compile time.",
   },
@@ -140,27 +187,37 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Adapter Pattern",
     difficulty: "medium",
-    stem: "Your checkout code is written against an internal PaymentGateway interface with a charge(amountCents) method. The company is integrating a third-party LegacyMerchantSDK whose method signature is processPayment(dollars, currencyCode, retryFlag) and which you can't modify. Rewriting all checkout call sites to match LegacyMerchantSDK's signature is too risky. What's the cleanest fix?",
+    stem: `Your checkout code calls an internal payment contract, but you must integrate a third-party payment SDK that exposes an incompatible method signature:
+
+\`\`\`javascript
+// Your expected interface
+paymentGateway.charge(amountCents);
+
+// The vendor SDK signature (cannot modify)
+legacyMerchantSDK.processPayment(dollars, currencyCode, retryFlag);
+\`\`\`
+
+Rewriting all application call sites is too risky. What is the cleanest way to integrate this SDK?`,
     options: [
       {
-        text: "Write a LegacyMerchantAdapter that implements PaymentGateway and translates charge() calls into processPayment() calls internally",
-        sub: "Wrap the incompatible SDK behind the interface checkout already expects",
+        text: "Create an intermediate class that implements the target gateway contract and translates calls to the external SDK signature internally.",
+        sub: "Wrap the incompatible dependency behind the interface your application expects",
         fix: "",
       },
       {
-        text: "Use the Observer pattern so checkout listens for payment completion events from LegacyMerchantSDK",
-        sub: "Decouple checkout from the payment call via events",
-        fix: "Observer addresses notification/event propagation, not interface incompatibility — checkout still has no way to invoke a charge() call against an SDK that doesn't expose one.",
+        text: "Implement a publish-subscribe event system so that checkout and the SDK communicate indirectly through event messages.",
+        sub: "Decouple components using asynchronous event notifications",
+        fix: "An event system does not reconcile the interface signature mismatch; the application still needs a way to invoke the payment method.",
       },
       {
-        text: "Apply the Decorator pattern to add charge() behavior on top of LegacyMerchantSDK",
-        sub: "Layer additional responsibility onto the SDK",
-        fix: "Decorator adds behavior to an object that already shares the target interface; here the two interfaces are fundamentally incompatible in shape, which is what Adapter exists to solve.",
+        text: "Apply the Decorator pattern to dynamically append the required payment validation behavior directly onto the SDK class.",
+        sub: "Extend the SDK functionality with runtime wrapper classes",
+        fix: "Decorator extends behavior of objects that already share the same interface. It cannot reconcile completely different method signatures.",
       },
       {
-        text: "Edit LegacyMerchantSDK's source to add a charge(amountCents) method",
-        sub: "Modify the SDK directly to match",
-        fix: "The scenario states the SDK can't be modified (third-party), and editing vendored/third-party code directly creates an unmaintainable fork.",
+        text: "Refactor the vendor SDK source files directly to expose the signature that your application is already configured to consume.",
+        sub: "Modify the external dependency to align with local requirements",
+        fix: "Directly modifying a third-party SDK is highly discouraged, as it makes updating the dependency later difficult and error-prone.",
       },
     ],
     correctIndex: 0,
@@ -174,27 +231,47 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Template Method Pattern",
     difficulty: "medium",
-    stem: "CsvReportExporter and PdfReportExporter both implement: fetch the data, sort it, then format and write it out. The fetch and sort steps are identical in both classes (copy-pasted), and only the final format/write step differs. A refactor needs to keep the overall steps in a fixed order while letting only that last step vary per format. What's the best-fit pattern?",
+    stem: `You are refactoring two report generator classes that share identical steps but have different outputs:
+
+\`\`\`javascript
+class CsvReportExporter {
+  export() {
+    this.fetchData();
+    this.sortData();
+    this.writeCsv();
+  }
+}
+
+class PdfReportExporter {
+  export() {
+    this.fetchData();
+    this.sortData();
+    this.writePdf();
+  }
+}
+\`\`\`
+
+The fetch and sort steps contain copy-pasted logic. Which pattern eliminates this duplication while enforcing the execution order of the steps?`,
     options: [
       {
-        text: "Create a ReportVisitor interface with specific visit methods for CsvReport and PdfReport structures, allowing format-specific logic to be externalized and applied.",
-        sub: "Externalize format-specific operations over an object structure into separate visitor classes.",
-        fix: "Visitor is primarily designed to add new operations to an existing object structure without modifying it. It does not directly address the problem of consolidating common algorithmic steps (fetch/sort) or fixing their execution order.",
+        text: "Create a ReportVisitor interface with specific visit methods for CSV and PDF structures to externalize the formatting logic.",
+        sub: "Represent formatting operations as visitor classes",
+        fix: "Visitor adds new operations to an existing object structure but does not consolidate common step sequences or enforce execution order.",
       },
       {
-        text: "Define an abstract base class with a final `export()` method, specifying `fetch()`, `sort()`, then an abstract `formatAndWrite()` for subclasses to implement.",
-        sub: "Fix the algorithm's skeleton in the base class, letting subclasses implement the varying step.",
+        text: "Define an abstract base class with a template method that calls shared fetch and sort methods, deferring the write step to subclasses.",
+        sub: "Fix the algorithm's skeleton in the parent class, letting subclasses override specific steps",
         fix: "",
       },
       {
-        text: "Develop an Adapter to translate the disparate interfaces of CsvReportExporter and PdfReportExporter into a common ReportExporter interface, standardizing their interaction.",
-        sub: "Make existing incompatible interfaces work together through an intermediate adapter class.",
-        fix: "The problem statement implies that both exporters already perform the same steps in sequence; there's no fundamental interface incompatibility to adapt. The core issue is duplicated algorithm logic, not disparate interfaces.",
+        text: "Develop an Adapter to translate the incompatible export interfaces of the exporters into a common unified export interface.",
+        sub: "Make existing disparate interfaces compatible through a wrapper class",
+        fix: "The exporters already share the same conceptual method signature; there are no incompatible interfaces to adapt.",
       },
       {
-        text: "Introduce a ReportExporter class that delegates the specific format and write operations to a pluggable 'ReportFormatter' strategy object, selectable at runtime.",
-        sub: "Decouple varying formatting logic from the main exporter using a swappable algorithm.",
-        fix: "While Strategy effectively isolates the varying format/write step, it doesn't inherently enforce a fixed sequence for fetch/sort/format, nor does it eliminate the potential for duplicated fetch/sort logic across multiple exporters.",
+        text: "Introduce a coordinator class that delegates the export steps to swappable pricing and writing strategy objects at runtime.",
+        sub: "Deconstruct the export process into independent pluggable strategies",
+        fix: "Strategy isolates varying algorithms but does not automatically consolidate shared parent logic or enforce step execution ordering.",
       },
     ],
     correctIndex: 1,
@@ -208,26 +285,34 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Command Pattern",
     difficulty: "hard",
-    stem: "A document editor calls `applyBold(selection)`, `applyItalic(selection)`, etc. directly from UI button handlers. Product now wants undo/redo and a macro-recording feature that replays a sequence of past edits. Directly calling formatting methods from the UI makes both features hard to add. What restructuring addresses this most directly?",
+    stem: `You are designing a rich text editor where the UI controls execute operations directly on the document:
+
+\`\`\`javascript
+// Button click handlers
+boldButton.onClick = () => editor.applyBold(selection);
+italicButton.onClick = () => editor.applyItalic(selection);
+\`\`\`
+
+You need to implement undo/redo and macro recording. Directly invoking these methods makes it difficult to track or reverse operations. What design pattern solves this?`,
     options: [
       {
-        text: "Apply the Observer pattern so the UI publishes 'edit happened' events that a history log subscribes to",
-        sub: "Decouple the UI from edit history via pub/sub",
-        fix: "Observer can log that something happened, but it doesn't give you a re-invokable, reversible unit of work — you still can't easily undo an event or replay it as a macro without reifying the action itself.",
+        text: "Apply the Observer pattern so that button handlers publish events that the document state subscribes to.",
+        sub: "Decouple UI interactions using event-driven communication",
+        fix: "Observer broadcasts that an event occurred, but it does not represent the actions as re-invokable, reversible objects needed for undo/redo.",
       },
       {
-        text: "Apply the Strategy pattern so applyBold and applyItalic are interchangeable strategy objects",
-        sub: "Make formatting algorithms swappable",
-        fix: "Strategy makes an algorithm swappable at the call site, but a strategy object isn't designed to be queued, stored in history, undone, or replayed — those needs point to Command, not Strategy.",
+        text: "Use the Strategy pattern to make individual text formatting algorithms interchangeable at runtime.",
+        sub: "Inject formatting behaviors into a single coordinator",
+        fix: "Strategy makes algorithms swappable, but it does not encapsulate requests as units of work that can be queued, logged, or undone.",
       },
       {
-        text: "Make Editor a Singleton so undo state is globally accessible from anywhere",
-        sub: "Centralize access to one shared editor instance",
-        fix: "Singleton only controls how many Editor instances exist; it says nothing about how individual edits are represented, reversed, or replayed, which is the actual gap here.",
+        text: "Restrict the Document Editor to a Singleton so that the edit history is globally accessible from any module.",
+        sub: "Centralize history tracking in a global instance",
+        fix: "Singleton only manages instance count; it does not solve how individual operations are stored, reversed, or replayed.",
       },
       {
-        text: "Implement the Command pattern, treating each editing operation as a concrete command object that can be stored and invoked.",
-        sub: "Encapsulate actions as reifiable, reversible, and replayable objects.",
+        text: "Encapsulate each editing action into an object with execute and undo methods, storing a history stack of these actions.",
+        sub: "Treat requests as objects that can be queued, tracked, and reversed",
         fix: "",
       },
     ],
@@ -242,27 +327,41 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Repository Pattern",
     difficulty: "medium",
-    stem: "OrderService methods are full of raw SQL strings like `db.query(\"SELECT * FROM orders WHERE customer_id = ?\", [id])` scattered across a dozen methods. The team is migrating from PostgreSQL to a different datastore, and every method touching orders needs to change. What restructuring would have minimized this migration's blast radius?",
+    stem: `You are refactoring a service class where data query logic is mixed directly with business logic:
+
+\`\`\`javascript
+class OrderService {
+  processOrder(orderId) {
+    const orders = db.query(
+      "SELECT * FROM orders WHERE id = ?",
+      [orderId]
+    );
+    // business rules...
+  }
+}
+\`\`\`
+
+If you migrate to a different database, you have to rewrite the queries across all methods. What design pattern minimizes this migration's blast radius?`,
     options: [
       {
-        text: "Configure the `db` connection as a Singleton to ensure a single shared instance.",
-        sub: "Guarantee a single global database connection object.",
-        fix: "Singleton manages object instantiation, not the location of data access logic. `OrderService` methods would still contain datastore-specific SQL strings, violating separation of concerns.",
+        text: "Make the database connection instance a Singleton to guarantee a single global connection point across all modules.",
+        sub: "Centralize database connection instantiation",
+        fix: "Singleton only manages the database connection lifecycle; it does not isolate the business logic from data query strings.",
       },
       {
-        text: "Implement an `OrderRepository` to manage order persistence operations for `OrderService`.",
-        sub: "Decouple domain logic from data access details.",
+        text: "Introduce an abstraction layer that exposes collections of domain entities, hiding the query syntax and datastore details.",
+        sub: "Decouple business logic from database operations using a collection-like interface",
         fix: "",
       },
       {
-        text: "Use the Decorator pattern to wrap `db.query()` calls with logging and caching behavior.",
-        sub: "Add cross-cutting behavior around data access operations.",
-        fix: "Decorators enhance existing calls but don't abstract the underlying data access mechanism; raw SQL would still be present within `OrderService` methods, leading to coupling.",
+        text: "Apply the Decorator pattern to wrap the database query methods with generic logging, transaction, and caching layers.",
+        sub: "Intercept query execution to add cross-cutting concerns",
+        fix: "Decorator wraps existing interfaces but does not decouple the query logic or SQL strings from the business service.",
       },
       {
-        text: "Apply the Facade pattern by creating a `DatabaseFacade` for unified data interaction.",
-        sub: "Provide a simplified interface to the database subsystem.",
-        fix: "A Facade simplifies access to a complex system, but the `OrderService` would still pass or construct raw SQL strings to the facade, maintaining datastore coupling.",
+        text: "Wrap the database connections in a unified Facade class that simplifies interface calls for the rest of the application.",
+        sub: "Provide a simplified interface to a complex database subsystem",
+        fix: "A Facade simplifies database access but still leaves the service layer responsible for executing datastore-specific queries.",
       },
     ],
     correctIndex: 1,
@@ -276,27 +375,35 @@ export const NEW_OOP = [
     subject: "OOP",
     concept: "Null Object Pattern",
     difficulty: "medium",
-    stem: "getAssignedAgent() on a SupportTicket can return null when no agent is assigned yet. Every caller across the codebase has its own version of `if (agent != null) { agent.notify(...) }`, and a few call sites forgot the check and crashed in production with a NullPointerException. What change removes the need for callers to null-check at every site?",
+    stem: `getAssignedAgent() on a SupportTicket can return null when no agent is assigned yet. Callers currently check for null before invoking methods:
+
+\`\`\`javascript
+if (agent != null) {
+  agent.notify(ticket);
+}
+\`\`\`
+
+Several call sites forgot this check and crashed with a NullPointerException in production. What design pattern resolves this at the source without requiring manual null-checks across all callers?`,
     options: [
       {
-        text: "Apply the Observer pattern so agents are notified automatically when assigned, removing the need to call getAssignedAgent()",
-        sub: "Push notifications instead of pulling the agent",
-        fix: "This redesigns the notification flow but doesn't address the many other call sites in the codebase that legitimately need to call getAssignedAgent() and currently null-check its result.",
+        text: "Apply the Observer pattern to automatically push event notifications to the agent object instead of fetching it.",
+        sub: "Use publish-subscribe messaging rather than querying state",
+        fix: "This changes the notification flow but does not resolve the null-checking requirement at other call sites that query the agent.",
       },
       {
-        text: "Have getAssignedAgent() return a NullAgent that implements the same Agent interface with no-op methods, instead of returning null",
-        sub: "Replace the absence of an object with a do-nothing object of the same type",
+        text: "Return a default, do-nothing collaborator implementation that matches the interface contract instead of null.",
+        sub: "Provide a safe, functional instance to represent the missing case",
         fix: "",
       },
       {
-        text: "Wrap every call site in a try/catch for NullPointerException",
-        sub: "Catch the crash after it happens",
-        fix: "This treats the symptom at every call site individually — exactly the duplication the question is trying to eliminate — rather than removing the need for null-handling altogether.",
+        text: "Wrap the client invocation sites in generic try-catch blocks to catch and swallow any runtime null pointer errors.",
+        sub: "Swallow runtime exceptions at the calling locations",
+        fix: "Swallowing exceptions hides the real application errors and does not remove the duplicated safety logic across calling code.",
       },
       {
-        text: "Make SupportTicket a Singleton so there's only one ticket instance to track",
-        sub: "Reduce instance count",
-        fix: "Singleton governs how many SupportTicket instances exist; it has no bearing on what getAssignedAgent() returns or how callers handle a missing agent.",
+        text: "Make the support ticket class a Singleton to track and coordinate a single global instance of the ticket state.",
+        sub: "Restrict the ticketing system to one shared instance",
+        fix: "Singleton manages class instance count; it does not solve how callers handle missing associations or optional fields.",
       },
     ],
     correctIndex: 1,
@@ -313,24 +420,24 @@ export const NEW_OOP = [
     stem: "A Subscription class has only getters/setters for status, renewalDate, and planTier — no behavior. All the logic for \"can this subscription be cancelled,\" \"should it auto-renew,\" and \"is it eligible for a downgrade\" lives in a separate SubscriptionRules utility class that reads and writes Subscription's fields directly. New engineers keep adding subscription rules in three different utility classes because no one can find where the logic \"should\" live. What's this design smell called, and what's the fix?",
     options: [
       {
-        text: "Premature abstraction — Subscription was abstracted before requirements were clear",
-        sub: "Introducing flexibility before it's needed",
-        fix: "Premature abstraction is about adding unneeded interfaces/extension points too early; here the issue is the opposite direction — behavior was stripped out of the domain object entirely, not over-abstracted.",
+        text: "Premature Abstraction: Define subscription interfaces early to allow for multiple decoupled concrete representations.",
+        sub: "Create extension points before actual requirements arise",
+        fix: "Premature abstraction is about adding unnecessary interfaces too early; the issue here is the lack of behavior in the domain class.",
       },
       {
-        text: "God Object — split Subscription into five smaller unrelated classes",
-        sub: "One class doing far too much",
-        fix: "Subscription as described holds almost no behavior at all (just getters/setters), the opposite of a God Object that's overloaded with responsibilities — the problem is too little behavior on the object, not too much.",
+        text: "God Object: Split the bloated state properties into smaller, separate classes to improve cohesion and class readability.",
+        sub: "Partition a large class with too many responsibilities",
+        fix: "A God Object is overloaded with behavior; the subscription class has almost no behavior, so the opposite is true.",
       },
       {
-        text: "Anemic Domain Model — move the business rules onto Subscription itself as methods like cancel() and isEligibleForDowngrade()",
-        sub: "Data-only objects with logic scattered in external service/utility classes",
+        text: "Anemic Domain Model: Move the business validation logic directly onto the class as methods that enforce the object's own invariants.",
+        sub: "Combine data and behavior within the primary domain object",
         fix: "",
       },
       {
-        text: "Violation of the Liskov Substitution Principle — SubscriptionRules can't substitute for Subscription",
-        sub: "Subtype incompatible with base type",
-        fix: "There's no inheritance relationship between SubscriptionRules and Subscription, so substitutability doesn't apply; the issue is where behavior lives, not subtype compatibility.",
+        text: "Liskov Substitution Violation: Restructure the utility classes using class inheritance to ensure type-safe method overrides.",
+        sub: "Adhere to subtype requirements in polymorphic hierarchies",
+        fix: "There is no inheritance or subtype substitution occurring between the utility classes and the subscription class.",
       },
     ],
     correctIndex: 2,

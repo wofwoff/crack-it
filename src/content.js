@@ -564,22 +564,22 @@ export const QUESTIONS = [
     stem: "A server has many short interactive tasks and a few long CPU-bound jobs. Users complain that clicks feel delayed even though CPU utilization is high. Which scheduler behavior best improves perceived responsiveness?",
     options: [
       {
-        text: "First Come First Served",
+        text: "Implementing a First-Come First-Served algorithm that schedules tasks strictly in the order they arrive in the execution queue.",
         sub: "Runs jobs in arrival order",
         fix: "FCFS can trap short interactive tasks behind long CPU-bound jobs. That convoy effect hurts responsiveness.",
       },
       {
-        text: "Round Robin with a small enough time quantum",
+        text: "Using a Round-Robin scheduler with a time slice small enough to ensure interactive tasks get scheduled frequently without starvation.",
         sub: "Time-slices CPU so interactive tasks get frequent turns",
         fix: "",
       },
       {
-        text: "Shortest Job First without preemption",
+        text: "Employing a non-preemptive Shortest Job First scheduler that runs tasks to completion based on estimated CPU execution time.",
         sub: "Optimizes average wait only when lengths are known",
         fix: "SJF helps average wait in theory, but non-preemptive scheduling still lets long jobs hold the CPU once started.",
       },
       {
-        text: "Priority scheduling with no aging",
+        text: "Assigning static priorities to interactive processes without an aging mechanism to boost lower-priority tasks over time.",
         sub: "Can starve lower-priority work",
         fix: "Priority scheduling can help if priorities are correct, but without aging it risks starvation and still needs careful tuning.",
       },
@@ -595,25 +595,36 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "CPU Scheduling",
     difficulty: "hard",
-    stem: "A low-priority logging process never runs because higher-priority jobs keep arriving on a strict priority scheduler. Which technique lets it eventually run without abandoning priorities?",
+    stem: `A database server utilizes a strict priority scheduler for its background tasks. You analyze the scheduler's behavior under heavy client load:
+
+\`\`\`text
+Ready Queue (Strict Priority):
+[PID 501] Priority: 9 (High)   - Running
+[PID 502] Priority: 8 (High)   - Ready (just arrived)
+[PID 503] Priority: 8 (High)   - Ready (just arrived)
+...
+[PID 999] Priority: 1 (Lowest) - Ready (Waiting for 3 hours)
+\`\`\`
+
+A low-priority metric collection task (PID 999) has not received any CPU cycles for hours because higher-priority worker tasks are constantly queued. What mechanism can be implemented to ensure PID 999 eventually executes without modifying its base priority permanently or disabling prioritization?`,
     options: [
       {
-        text: "Shorten the time quantum",
+        text: "Configure the scheduler to periodically cycle through ready processes in arrival order using a round-robin time slice.",
         sub: "Smaller slices for everyone",
         fix: "A smaller quantum affects round-robin sharing, but under strict priority the low-priority job still never gets scheduled.",
       },
       {
-        text: "Switch to FCFS",
+        text: "Temporarily allocate additional memory swap blocks to the starved process to trigger an automatic priority boost.",
         sub: "Run strictly in arrival order",
         fix: "FCFS removes priorities entirely, which the question says we want to keep. Aging fixes starvation while preserving priority.",
       },
       {
-        text: "Aging: gradually raise the priority of waiting processes",
+        text: "Dynamically increment the effective execution priority of a process proportional to the duration it spends in the ready queue.",
         sub: "Long waits boost priority over time",
         fix: "",
       },
       {
-        text: "Increase the process's memory allocation",
+        text: "Set a hard ceiling on the maximum continuous CPU time slices any high-priority thread can consume before eviction.",
         sub: "More RAM for the starved process",
         fix: "Memory has nothing to do with scheduling order. Starvation is about CPU selection, not memory.",
       },
@@ -629,25 +640,37 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Deadlock",
     difficulty: "easy",
-    stem: "Two services each acquire one lock and then wait forever for the lock held by the other service. Which Coffman condition is most directly visible in this wait cycle?",
+    stem: `You are debugging a deadlock between two database transaction processes. The execution traces show the following sequence:
+
+\`\`\`text
+Transaction 1:
+- Acquired exclusive lock on Row A
+- Waiting to acquire lock on Row B
+
+Transaction 2:
+- Acquired exclusive lock on Row B
+- Waiting to acquire lock on Row A
+\`\`\`
+
+Both transactions are blocked indefinitely. Which of the Coffman conditions is represented by the specific dependency loop shown in this scenario?`,
     options: [
       {
-        text: "No preemption",
+        text: "Resources cannot be forcibly reclaimed from the processes holding them until those processes complete their tasks.",
         sub: "Resources cannot be forcibly taken away",
         fix: "No preemption may allow the deadlock to persist, but the described cycle is circular wait.",
       },
       {
-        text: "Hold and wait",
+        text: "Processes currently holding allocated resources are permitted to request and wait for additional resources.",
         sub: "A process holds one resource while requesting another",
         fix: "Hold and wait is present too, but the question asks what the wait cycle itself shows most directly.",
       },
       {
-        text: "Mutual exclusion",
+        text: "Only one process can hold a particular resource at any given time, preventing concurrent shareable access.",
         sub: "Only one actor can hold a resource at a time",
         fix: "Mutual exclusion is present, but the visible loop is the circular chain of waiting.",
       },
       {
-        text: "Circular wait",
+        text: "A closed chain of processes exists such that each process holds at least one resource needed by the next process in the sequence.",
         sub: "Each process waits for a resource held by the next one",
         fix: "",
       },
@@ -663,25 +686,34 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Virtual Memory",
     difficulty: "medium",
-    stem: "A process accesses an address whose page is not currently in physical RAM. The CPU traps to the OS, which loads the page from disk and resumes the instruction. What is this event called?",
+    stem: `During the execution of a user-space process, the CPU attempts to translate a virtual memory address and encounters the following state:
+
+\`\`\`text
+Virtual Address: 0x7f8a12bc4008
+  └─ Page Directory Offset Lookup
+     └─ Page Table Entry (PTE) Present Bit: 0
+        └─ Hardware Exception: Interrupt Vector 14 (Page Fault)
+\`\`\`
+
+The kernel intercepts this exception, retrieves the page from backing storage, updates the PTE present bit to 1, and restarts the instruction. How is this specific event classified when the page must be read from disk?`,
     options: [
       {
-        text: "Cache miss",
+        text: "A minor page fault, indicating the page was already resident in physical memory but needed page table entry registration.",
         sub: "Data not in CPU cache, fetched from RAM",
         fix: "A cache miss is handled in hardware by fetching from RAM. This trap goes to the OS to fetch a page from disk, which is a page fault.",
       },
       {
-        text: "Segmentation fault",
+        text: "A segmentation fault, indicating the virtual address pointed to an restricted kernel memory segment that was illegal to read.",
         sub: "Access to an invalid/forbidden address",
         fix: "A segmentation fault is an illegal access that usually kills the process. Here the access is valid; the page just wasn't resident yet.",
       },
       {
-        text: "TLB hit",
+        text: "A Translation Lookaside Buffer (TLB) miss, indicating the cache translation failed and hardware performed a page table walk.",
         sub: "Address translation found in the TLB",
         fix: "A TLB hit means translation succeeded quickly. This scenario is the opposite: the page isn't in memory at all.",
       },
       {
-        text: "Page fault",
+        text: "A major page fault, indicating the requested page mapping was valid but the data had to be loaded from disk into physical memory.",
         sub: "Accessed page isn't resident; OS loads it",
         fix: "",
       },
@@ -697,25 +729,33 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Thrashing",
     difficulty: "hard",
-    stem: "After launching too many memory-hungry processes, a server's CPU utilization collapses while the disk runs constantly. Every process keeps page-faulting on pages just evicted from others. What is happening?",
+    stem: `You are diagnosing a server that has become completely unresponsive. Running \`vmstat 1\` displays:
+
+\`\`\`text
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 0  8 284120  12480   4100  14500 8500 9800  38000 41000 1200 1500  1  9  0 90  0
+\`\`\`
+
+The CPU utilization for user tasks (\`us\`) has plummeted to 1%, while the I/O wait time (\`wa\`) is at 90%, and swap activity (\`si\`/\`so\`) is extremely high. What system state does this indicate, and how is it resolved?`,
     options: [
       {
-        text: "A deadlock among the processes",
+        text: "A circular dependency loop has formed across lock requests in database transactions; resolve by running a deadlock detection sweep.",
         sub: "Circular resource wait",
         fix: "No process is waiting on a lock held by another; they're all making 'progress' but spending it on paging. That's thrashing, not deadlock.",
       },
       {
-        text: "Thrashing from over-committed memory",
+        text: "The virtual memory working sets exceed physical RAM, causing continuous page faults; resolve by reducing the active process count.",
         sub: "Excessive paging starves real work",
         fix: "",
       },
       {
-        text: "Priority inversion",
+        text: "High-priority tasks are waiting on a resource held by a low-priority process; resolve by enforcing a priority inheritance protocol.",
         sub: "Low-priority task blocks a high-priority one",
         fix: "Priority inversion is about a lock held by a lower-priority task. The described symptom is constant paging, i.e., thrashing.",
       },
       {
-        text: "A CPU-bound workload saturating cores",
+        text: "The filesystem inode index tables have been completely depleted on the disk; resolve by rebuilding the drive directory trees.",
         sub: "Compute, not I/O, is the limit",
         fix: "CPU utilization is collapsing, not saturating, and the disk is the busy resource. The bottleneck is paging I/O, not compute.",
       },
@@ -731,25 +771,39 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Synchronization",
     difficulty: "medium",
-    stem: "Two threads run counter = counter + 1 a million times each on a shared variable with no synchronization. The final value is often less than two million. What is the root cause?",
+    stem: `Two threads execute the following loop concurrently without any synchronization:
+
+\`\`\`cpp
+// Shared global variable
+volatile int counter = 0;
+
+// Thread A and Thread B run this function:
+void increment() {
+    for (int i = 0; i < 1000000; ++i) {
+        counter++;
+    }
+}
+\`\`\`
+
+The final value of \`counter\` is consistently and unpredictably less than 2,000,000. What is the root cause?`,
     options: [
       {
-        text: "A race condition on a non-atomic read-modify-write",
+        text: "A race condition on a non-atomic read-modify-write instruction sequence.",
         sub: "Interleaved updates lose increments",
         fix: "",
       },
       {
-        text: "A deadlock between the two threads",
+        text: "A thread deadlock preventing execution loops from completing all iterations.",
         sub: "Each waits on the other",
         fix: "Nothing is blocked or waiting; both threads finish. The lost increments come from unsynchronized interleaving, not a deadlock.",
       },
       {
-        text: "Insufficient stack size",
+        text: "An stack overflow condition caused by excessive call frame allocation sizes.",
         sub: "Threads overflow their stacks",
         fix: "Stack size doesn't cause lost increments. The shared counter is corrupted by concurrent read-modify-write, a race.",
       },
       {
-        text: "Compiler optimizing away the loop",
+        text: "Compiler optimizations that completely eliminate the loop during translation.",
         sub: "Dead-code elimination",
         fix: "If the loop were eliminated the count would be near zero or unchanged consistently, not 'often less than two million.' The signature is a race.",
       },
@@ -765,25 +819,45 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Semaphores",
     difficulty: "medium",
-    stem: "You must limit access to a pool of exactly 5 database connections so no more than 5 threads use one at a time, while others wait. Which primitive directly models this?",
+    stem: `You are implementing a database connection pool manager in a multi-threaded application:
+
+\`\`\`cpp
+class ConnectionPool {
+private:
+    std::vector<Connection> pool;
+    // Which concurrency primitive best coordinates access here?
+    ??? accessLock; 
+public:
+    Connection acquire() {
+        accessLock.wait();
+        return getAvailableConnection();
+    }
+    void release(Connection conn) {
+        returnConnectionToPool(conn);
+        accessLock.signal();
+    }
+};
+\`\`\`
+
+If there are exactly 5 connections in the pool and you want at most 5 threads to access them concurrently, blocking any additional threads until a connection is returned, which primitive is the most direct fit?`,
     options: [
       {
-        text: "A spinlock",
+        text: "A mutual exclusion lock that serializes execution of the acquire and release code blocks across all threads.",
         sub: "Busy-waits for a single lock",
         fix: "A spinlock guards one resource with busy-waiting and admits a single holder, not a pool of five.",
       },
       {
-        text: "A counting semaphore initialized to 5",
+        text: "An integer-based signaling variable initialized to 5 that decrements on acquire and increments on release.",
         sub: "Permits up to N concurrent holders",
         fix: "",
       },
       {
-        text: "A binary semaphore / mutex",
+        text: "A spin-waiting lock wrapper that continuously polls the availability status of the resource pool in a loop.",
         sub: "Allows one holder at a time",
         fix: "A mutex permits only a single holder, which would serialize access to one connection, not five. You need a count of 5.",
       },
       {
-        text: "A condition variable alone",
+        text: "A stateless condition variable that broadcast-notifies all waiting threads whenever any resource status changes.",
         sub: "Signals state changes, no built-in count",
         fix: "A condition variable by itself doesn't track a permit count; you'd have to build the counting logic and a lock around it manually.",
       },
@@ -799,25 +873,33 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Process vs Thread",
     difficulty: "easy",
-    stem: "A program spawns several workers that must share the same in-memory cache cheaply, without IPC overhead. Should they be separate processes or threads, and why?",
+    stem: `You are designing a high-throughput application that cache-stores user sessions in memory:
+
+\`\`\`cpp
+// Shared global cache structure
+std::unordered_map<std::string, Session> sessionCache;
+std::mutex cacheMutex;
+\`\`\`
+
+Multiple worker instances must access and write to this cache frequently with the lowest possible execution latency and no inter-process communication (IPC) overhead. What concurrency model should you choose?`,
     options: [
       {
-        text: "Processes, because threads cannot run in parallel",
+        text: "Separate operating system processes, because they share a single unified address space by default on modern Unix kernels.",
         sub: "Threads are always serialized",
         fix: "Threads can run in parallel on multiple cores (subject to language runtime details). The deciding factor here is cheap shared memory.",
       },
       {
-        text: "Threads, because they share the same address space",
+        text: "Multiple threads within a single process, since they share the same memory space and can access global variables directly.",
         sub: "Shared memory by default",
         fix: "",
       },
       {
-        text: "Threads, because each gets an isolated address space",
+        text: "Multiple threads within a single process, because the kernel allocates a dedicated virtual address space for each thread.",
         sub: "Isolation prevents shared cache",
         fix: "Threads do not get isolated address spaces; they share the process's memory. Isolation would defeat the goal of a shared cache.",
       },
       {
-        text: "Processes, because they share the same address space",
+        text: "Separate operating system processes, because processes avoid memory access collisions by communicating via local loopback sockets.",
         sub: "Processes share memory by default",
         fix: "Processes have separate address spaces by default; sharing memory between them needs explicit IPC or shared-memory segments. That's the overhead we want to avoid.",
       },
@@ -833,25 +915,35 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Page Replacement",
     difficulty: "hard",
-    stem: "An OS using FIFO page replacement sees page faults increase when it is given more physical frames, which seems backwards. What is this counterintuitive phenomenon called?",
+    stem: `You are testing a page replacement algorithm in an operating system simulator using the following reference sequence:
+
+\`\`\`text
+Page reference string: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5
+\`\`\`
+
+You run the simulation under two frame allocation sizes:
+- With 3 physical memory frames: 9 page faults occur.
+- With 4 physical memory frames: 10 page faults occur.
+
+Which page replacement algorithm was used, and what is the term for this behavior where adding physical frames increases faults?`,
     options: [
       {
-        text: "Belady's anomaly",
+        text: "FIFO (First-In, First-Out) replacement algorithm; this counterintuitive behavior is known as Belady's anomaly.",
         sub: "More frames can cause more faults under FIFO",
         fix: "",
       },
       {
-        text: "Working set drift",
+        text: "LRU (Least Recently Used) replacement algorithm; this cache degradation behavior is known as thrashing.",
         sub: "The active page set changes over time",
         fix: "Working set changes are normal program behavior; they don't explain faults rising specifically because frames were added under FIFO.",
       },
       {
-        text: "TLB shootdown",
+        text: "OPT (Optimal) replacement algorithm; this resource allocation mismatch is known as working set drift.",
         sub: "Invalidating TLB entries across cores",
         fix: "A TLB shootdown is about translation cache coherence across CPUs, unrelated to frame count affecting fault rate.",
       },
       {
-        text: "Thrashing",
+        text: "LFU (Least Frequently Used) replacement algorithm; this translation failure is known as a TLB shootdown.",
         sub: "Excessive paging from over-commit",
         fix: "Thrashing is about too little memory for the working set. Here adding memory increases faults under a specific algorithm, which is Belady's anomaly.",
       },
@@ -867,25 +959,42 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Processes & fork",
     difficulty: "medium",
-    stem: "A parent process calls fork() and then exits immediately, but the child keeps running for minutes. The child's parent becomes PID 1. What term describes the child's new situation?",
+    stem: `You run the following code snippet on a Linux system:
+
+\`\`\`cpp
+#include <unistd.h>
+#include <stdlib.h>
+
+int main() {
+    pid_t pid = fork();
+    if (pid > 0) {
+        exit(0); // Parent exits immediately
+    } else if (pid == 0) {
+        sleep(300); // Child continues running
+    }
+    return 0;
+}
+\`\`\`
+
+Immediately after the parent process exits, what happens to the child process's relationship with the operating system?`,
     options: [
       {
-        text: "It became a daemon by definition",
+        text: "The child is immediately terminated by the kernel since it no longer possesses a valid parent control block in the process table.",
         sub: "Any re-parented process is a daemon",
         fix: "Daemons are deliberately created background services (often via double-fork and detaching). Merely outliving its parent makes the child an orphan, not automatically a daemon.",
       },
       {
-        text: "It became an orphan, re-parented to init (PID 1)",
+        text: "The child is adopted by the init process (PID 1), which assumes the responsibility of reaping its exit status when it terminates.",
         sub: "Parent died while child runs",
         fix: "",
       },
       {
-        text: "It was killed by SIGCHLD",
+        text: "The child's state changes to a zombie, preserving its allocated heap and file descriptors until the parent is restarted.",
         sub: "Parent's exit signals the child to die",
         fix: "A parent exiting does not kill its children, and SIGCHLD is sent to the parent about the child, not the other way around.",
       },
       {
-        text: "It became a zombie process",
+        text: "The child is detached from the process table, becoming a system daemon that is immune to terminal signals and interrupts.",
         sub: "Terminated but unreaped",
         fix: "A zombie is a process that has terminated but whose exit status hasn't been collected. This child is still running, not terminated.",
       },
@@ -901,25 +1010,34 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Locks & Mutexes",
     difficulty: "medium",
-    stem: "A high-priority thread is blocked waiting on a mutex held by a low-priority thread, but a medium-priority thread keeps preempting the low-priority holder so it never releases the lock. What is this, and a standard fix?",
+    stem: `You are analyzing a task scheduling failure on a real-time OS. Your telemetry captures the following thread state:
+
+\`\`\`text
+Thread Status:
+- Thread H (Priority: High)   - Blocked (Waiting on Mutex A)
+- Thread M (Priority: Medium) - Running (Compute-bound execution)
+- Thread L (Priority: Low)    - Ready (Holds Mutex A, Preempted by M)
+\`\`\`
+
+Thread H cannot execute because it is waiting for Mutex A. Thread L cannot release Mutex A because Thread M is saturating the CPU. What scheduling phenomenon is occurring, and how can the OS scheduler resolve it?`,
     options: [
       {
-        text: "Starvation of the medium thread; fix with aging",
+        text: "Task starvation; resolve by periodically raising the priority of Thread M to ensure its compute loops finish faster.",
         sub: "Medium thread never runs",
         fix: "The medium thread is running fine — it's the high-priority thread that's stuck. The problem is inversion, not starvation of the medium thread.",
       },
       {
-        text: "Priority inversion; fix with priority inheritance",
+        text: "Priority inversion; resolve by temporarily boosting the priority of Thread L to match Thread H until the mutex is released.",
         sub: "Holder temporarily inherits the waiter's priority",
         fix: "",
       },
       {
-        text: "Deadlock; fix with lock ordering",
+        text: "Resource deadlock; resolve by forcing Thread H to release all held mutexes and retry the allocation after a random backoff.",
         sub: "Break a circular wait",
         fix: "There's no circular wait here — only one lock is involved. The high-priority thread is delayed, not deadlocked.",
       },
       {
-        text: "Livelock; fix with backoff",
+        text: "Thread livelock; resolve by running a lock detection thread that terminates Thread M when CPU utilization exceeds 90%.",
         sub: "Threads keep retrying without progress",
         fix: "Livelock involves threads actively changing state without progress. Here the high-priority thread is simply blocked, a priority inversion.",
       },
@@ -935,25 +1053,34 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "IPC",
     difficulty: "easy",
-    stem: "Two unrelated processes on the same machine need to exchange a stream of bytes. One writes, the other reads, and the OS buffers data between them through a file-like endpoint. Which IPC mechanism is being described?",
+    stem: `You establish inter-process communication between two unrelated processes running on the same host using the following shell sequence:
+
+\`\`\`bash
+$ mkfifo /tmp/app_channel
+$ producer_process > /tmp/app_channel
+# In another terminal window:
+$ consumer_process < /tmp/app_channel
+\`\`\`
+
+Which underlying operating system mechanism is facilitating this buffered, unidirectional byte stream?`,
     options: [
       {
-        text: "A page table",
+        text: "A memory-mapped file mapping that allocates shared physical RAM pages directly into the virtual address spaces of both processes.",
         sub: "Maps virtual to physical addresses",
         fix: "A page table is part of address translation, not an inter-process communication channel.",
       },
       {
-        text: "A pipe (or named pipe/FIFO)",
+        text: "A named pipe (FIFO) that exposes a virtual file interface and leverages kernel buffers to transfer data directly between the processes.",
         sub: "Unidirectional byte stream buffered by the OS",
         fix: "",
       },
       {
-        text: "A mutex",
+        text: "A Unix domain socket that establishes a full-duplex connection utilizing TCP packet structures routed through the loopback interface.",
         sub: "A lock for mutual exclusion",
         fix: "A mutex coordinates access to shared data; it does not transport a stream of bytes between processes.",
       },
       {
-        text: "A system call table",
+        text: "A shared system message queue that serializes structured message blocks into a kernel-managed priority storage cache.",
         sub: "Dispatch table for syscalls",
         fix: "The syscall table routes kernel entry points; it isn't a data channel between two processes.",
       },
@@ -969,25 +1096,33 @@ export const QUESTIONS = [
     subject: "OS",
     concept: "Context Switching",
     difficulty: "medium",
-    stem: "Profiling shows a system spending a large share of CPU time saving and restoring registers, program counters, and memory maps as it rapidly alternates between hundreds of runnable threads. What overhead is this, and what reduces it?",
+    stem: `You are troubleshooting a performance issue on a web server running a thread-per-request model under heavy load. You run \`vmstat 1\` and see:
+
+\`\`\`text
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+18  0      0 204850  45100 820100    0    0     0     8  800 195000  8 88  4  0  0
+\`\`\`
+
+The server CPU is highly saturated, but user-space application CPU (\`us\`) is under 10%, while system CPU (\`sy\`) is near 90%. The thread count is in the thousands. What operational overhead is dominating the CPU cycles, and how can it be mitigated?`,
     options: [
       {
-        text: "Context-switch overhead; reduce by fewer/larger time slices or fewer threads",
+        text: "CPU cycles are consumed saving and restoring register states and reloading MMU page tables; mitigate by moving to an asynchronous event-driven I/O model.",
         sub: "Switching cost grows with switch frequency",
         fix: "",
       },
       {
-        text: "Page-fault overhead; reduce by adding RAM",
+        text: "CPU cycles are lost waiting for mechanical storage drives to fetch missing pages into memory; mitigate by expanding physical RAM or swap partitions.",
         sub: "Disk paging dominates",
         fix: "Saving/restoring registers and memory maps on each switch describes context switching, not page faults. The fix is fewer switches, not more RAM.",
       },
       {
-        text: "System-call overhead; reduce by batching syscalls",
+        text: "CPU cycles are spent parsing security boundaries during transitions between user space and kernel space; mitigate by caching kernel data in application heaps.",
         sub: "Kernel entry cost",
         fix: "Syscall cost is per kernel entry. The described cost is specifically the state save/restore between threads, i.e., context switching.",
       },
       {
-        text: "Cache coherence traffic; reduce by fewer cores",
+        text: "CPU cycles are wasted by cross-core cache invalidations due to shared memory contention; mitigate by binding all thread processes to a single execution core.",
         sub: "Cross-core invalidations",
         fix: "Coherence traffic is about shared cache lines across cores, not the register/PC save-restore of switching between threads.",
       },
@@ -1006,24 +1141,24 @@ export const QUESTIONS = [
     stem: "A browser connects to https://example.com for the first time. Before sending the HTTP request body, it verifies a certificate chain and negotiates encryption keys. Which layer of the request path is responsible for that?",
     options: [
       {
-        text: "TLS handshake",
+        text: "The security layer protocol handshake (TLS), which establishes cryptographic parameters and session keys.",
         sub: "Authenticates the server and establishes encrypted session keys",
         fix: "",
       },
       {
-        text: "TCP 3-way handshake",
+        text: "The transport-layer three-way handshake (TCP), which initializes sequence numbers and buffers.",
         sub: "Establishes a reliable byte stream",
-        fix: "TCP creates the connection, but it does not verify certificates or negotiate application encryption.",
+        fix: "TCP sets up a reliable raw byte connection but does not handle encryption keys, certificates, or session security.",
       },
       {
-        text: "HTTP cache validation",
+        text: "The application-layer validation check (HTTP Cache), which determines if resources are fresh.",
         sub: "Checks whether cached content is fresh",
-        fix: "Cache validation is an HTTP concern and happens after the secure channel exists.",
+        fix: "HTTP cache validation happens at the application layer after the secure connection has already been fully established.",
       },
       {
-        text: "DNS",
+        text: "The domain name resolution system (DNS), which translates hostnames into network IP addresses.",
         sub: "Resolves names to IP addresses",
-        fix: "DNS only finds the server address. Certificate validation and key negotiation happen after the TCP connection starts.",
+        fix: "DNS resolves a domain name to an IP address before a connection is opened; it does not negotiate keys or validate certificates.",
       },
     ],
     correctIndex: 0,
@@ -1037,27 +1172,33 @@ export const QUESTIONS = [
     subject: "CN",
     concept: "Caching",
     difficulty: "easy",
-    stem: "A CDN serves the same product image to thousands of users near Mumbai without hitting the origin server each time. Which network idea is doing the most work here?",
+    stem: `You inspect the server access logs for your origin application server and see only a single request for a popular product image:
+\`\`\`text
+192.168.1.50 - - [17/Jul/2026:02:00:00 +0000] "GET /images/hero.jpg HTTP/1.1" 200 45210
+\`\`\`
+However, regional analytics show that the image was successfully retrieved 10,000 times by clients in the same hour, with the remaining 9,999 requests served from a point-of-presence (PoP) closer to the users.
+
+Which network architecture pattern is primarily responsible for reducing this origin load?`,
     options: [
       {
-        text: "TCP congestion control",
+        text: "Dynamic routing table updates via BGP path selection.",
         sub: "Adjusts send rate based on network signals",
-        fix: "Congestion control helps delivery, but it does not explain why the origin server is skipped.",
+        fix: "BGP path selection optimizes routing paths between autonomous systems but does not store copies of assets or intercept requests to prevent them from reaching the origin.",
       },
       {
-        text: "Caching at an edge location",
+        text: "Storing static asset copies at distributed edge nodes.",
         sub: "Stores repeated content close to users",
         fix: "",
       },
       {
-        text: "DNS recursion",
+        text: "Resolving domain names via recursive DNS server lookups.",
         sub: "Finds authoritative answers for names",
-        fix: "DNS may route users to a nearby CDN node, but the repeated image delivery is the cache behavior.",
+        fix: "Recursive DNS lookups translate the hostname to an IP address (possibly pointing to a nearby CDN node) but do not store or serve the asset content itself.",
       },
       {
-        text: "WebSockets",
+        text: "Establishing persistent full-duplex TCP socket connections.",
         sub: "Keeps a bidirectional connection open",
-        fix: "WebSockets are for live bidirectional communication, not static asset reuse.",
+        fix: "Persistent TCP connections keep sockets open to reduce handshake overhead, but they still require requests to travel to the origin server to fetch the asset.",
       },
     ],
     correctIndex: 1,
@@ -1105,23 +1246,28 @@ export const QUESTIONS = [
     subject: "CN",
     concept: "DNS",
     difficulty: "easy",
-    stem: "Typing example.com in a browser triggers a lookup that returns 93.184.216.34 before any connection is made. Which system performed this name-to-address translation?",
+    stem: `During a network troubleshooting session, you execute the following diagnostic command:
+\`\`\`bash
+$ dig api.example.com +short
+93.184.216.34
+\`\`\`
+Which network protocol or system is responsible for performing this hostname-to-IP address mapping?`,
     options: [
-      { text: "DNS", sub: "Resolves domain names to IP addresses", fix: "" },
+      { text: "Domain Name System (DNS)", sub: "Resolves domain names to IP addresses", fix: "" },
       {
-        text: "NAT",
+        text: "Network Address Translation (NAT)",
         sub: "Rewrites addresses at a gateway",
-        fix: "NAT translates between private and public IP addresses at a router; it has nothing to do with resolving names.",
+        fix: "NAT rewrites IP addresses and ports at a gateway to share a public IP, but does not perform hostname resolutions.",
       },
       {
-        text: "DHCP",
+        text: "Dynamic Host Configuration Protocol (DHCP)",
         sub: "Assigns IP addresses to hosts",
-        fix: "DHCP hands out IP configuration to your own device; it doesn't translate a website's name to its IP.",
+        fix: "DHCP assigns dynamic IP addresses and network configuration parameters to client devices when they join a network.",
       },
       {
-        text: "ARP",
+        text: "Address Resolution Protocol (ARP)",
         sub: "Maps IP to MAC on the local link",
-        fix: "ARP resolves an IP address to a hardware MAC address within a local network, not a domain name to an IP.",
+        fix: "ARP maps IP addresses to physical MAC addresses on the local network link, not hostnames to IP addresses.",
       },
     ],
     correctIndex: 0,
@@ -1202,24 +1348,24 @@ export const QUESTIONS = [
     stem: "Traffic to a web app has grown past what one server handles. A device in front distributes incoming requests across several identical backend servers and stops sending to any that fail health checks. What is this component?",
     options: [
       {
-        text: "A load balancer",
+        text: "A reverse proxy configured to distribute traffic across a pool and route around unhealthy nodes.",
         sub: "Spreads requests across backends, removes unhealthy ones",
         fix: "",
       },
       {
-        text: "A reverse proxy cache only",
+        text: "A DNS resolver configured with a round-robin record set to translate domain names to host IP addresses.",
         sub: "Caches responses",
-        fix: "Caching is a related proxy feature, but the defining behavior here — spreading load across servers and dropping unhealthy ones — is load balancing.",
+        fix: "While round-robin DNS can distribute traffic, it lacks dynamic health-check awareness and will continue routing clients to dead IPs until DNS caches expire.",
       },
       {
-        text: "A DNS resolver",
+        text: "A local edge server configured to store static asset copies and serve them directly to regional users.",
         sub: "Translates names to IPs",
-        fix: "While DNS can do coarse round-robin, the described per-request distribution with health checks and failover is a load balancer's job.",
+        fix: "Edge servers cache static content to reduce origin load, but they do not dynamically distribute active application requests or manage backend server pools.",
       },
       {
-        text: "A firewall",
+        text: "A stateful network firewall configured with packet filtering policies to block unauthorized traffic.",
         sub: "Filters traffic by security rules",
-        fix: "A firewall permits or blocks traffic by policy; it doesn't distribute requests across a backend pool or run health checks for routing.",
+        fix: "Firewalls block or allow packets based on security policies, ports, and protocols; they do not perform request distribution, pooling, or backend health checks.",
       },
     ],
     correctIndex: 0,
@@ -1236,22 +1382,22 @@ export const QUESTIONS = [
     stem: "A mobile client's network flaps and it retries the same request several times. The API designers want repeated retries to not create duplicate resources or double-charge. Which HTTP method choice and property supports safe retries for an update-by-id?",
     options: [
       {
-        text: "Use POST, which is idempotent by definition",
+        text: "Use POST, which is defined as non-idempotent to ensure the server processes every incoming retry independently.",
         sub: "Repeats are always safe",
-        fix: "POST is not idempotent; repeating it typically creates a new resource each time, which is exactly the duplication risk described.",
+        fix: "POST is non-idempotent, meaning repeated retries will create duplicate resources or transactions, which is exactly the risk described.",
       },
       {
-        text: "Use DELETE because it creates resources idempotently",
+        text: "Use DELETE, which automatically creates and initializes the target resource if it does not already exist.",
         sub: "Delete adds the resource",
-        fix: "DELETE removes resources, not creates them. The task is an update-by-id, for which PUT is the idempotent choice.",
+        fix: "DELETE is intended for resource removal, not creation or modification; it does not initialize resources on the server.",
       },
       {
-        text: "Use GET to perform the update",
+        text: "Use GET, which allows safe execution of state-mutating updates on resources by bypassing typical write locks.",
         sub: "GET can modify state safely",
-        fix: "GET must be safe and read-only; using it to mutate state violates HTTP semantics and won't make updates idempotent.",
+        fix: "GET is defined as safe and read-only; using it to modify server state violates the HTTP specification and causes unpredictable side effects.",
       },
       {
-        text: "Use PUT, which is idempotent — repeating it yields the same end state",
+        text: "Use PUT, which is defined as idempotent, ensuring that duplicate requests result in the same final system state.",
         sub: "Same request, same result",
         fix: "",
       },
@@ -1270,24 +1416,24 @@ export const QUESTIONS = [
     stem: "A network is configured as 192.168.10.0/24. An admin needs to know how many usable host addresses it provides. What is the count and the reasoning?",
     options: [
       {
-        text: "512 usable hosts",
+        text: "512 usable hosts, because a prefix of /24 leaves 9 bits available for addressing host interfaces.",
         sub: "A /24 holds 9 host bits",
-        fix: "A /24 has 32 − 24 = 8 host bits, giving 2^8 = 256 addresses, not 512. Nine host bits would be a /23.",
+        fix: "A /24 prefix leaves 8 bits for host addresses (32 - 24 = 8), yielding 2^8 = 256 total addresses, not 512.",
       },
       {
-        text: "256 usable hosts",
+        text: "256 usable hosts, because all addresses within the subnet range can be assigned to active interfaces.",
         sub: "All addresses are assignable",
-        fix: "Two addresses are reserved — the network address (.0) and the broadcast address (.255) — so 256 total minus 2 leaves 254 usable.",
+        fix: "The first address (.0) and the last address (.255) are reserved and cannot be assigned to individual hosts.",
       },
       {
-        text: "254 usable hosts (256 minus network and broadcast)",
+        text: "254 usable hosts, because the first address is the network identifier and the last is the broadcast address.",
         sub: "/24 leaves 8 host bits",
         fix: "",
       },
       {
-        text: "24 usable hosts",
+        text: "24 usable hosts, because the CIDR suffix indicates the exact maximum number of active network hosts.",
         sub: "The /24 means 24 hosts",
-        fix: "The /24 is the prefix length (network bits), not a host count. It leaves 8 host bits, i.e., 256 addresses and 254 usable.",
+        fix: "The /24 prefix indicates that the first 24 bits are the network address, not that the host count is limited to 24.",
       },
     ],
     correctIndex: 2,
@@ -1301,27 +1447,33 @@ export const QUESTIONS = [
     subject: "CN",
     concept: "CORS",
     difficulty: "medium",
-    stem: "JavaScript on https://app.example.com calls an API at https://api.other.com. The browser blocks reading the response and logs a cross-origin error, even though the server returned 200. What mechanism is enforcing this?",
+    stem: `A frontend application hosted at \`https://app.example.com\` makes a request to \`https://api.other.com/data\`. The browser console displays:
+\`\`\`text
+Access to fetch at 'https://api.other.com/data' from origin 'https://app.example.com' 
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present 
+on the requested resource.
+\`\`\`
+The server logs confirm the request completed with HTTP status code 200. Which mechanism is responsible for blocking the frontend code from reading this response?`,
     options: [
       {
-        text: "TLS certificate validation failure",
+        text: "A transport-layer handshake validation failure on the secure connection.",
         sub: "Bad certificate",
-        fix: "A certificate failure would prevent the connection entirely, not return 200 with a cross-origin error. This is the same-origin policy/CORS.",
+        fix: "A TLS or transport handshake failure would terminate the connection before any HTTP request is sent, preventing the server from returning an HTTP 200 status.",
       },
       {
-        text: "The same-origin policy, relaxed only by CORS headers",
+        text: "The client-side same-origin policy, which requires explicit server permission headers.",
         sub: "Browser blocks cross-origin reads without permission",
         fix: "",
       },
       {
-        text: "DNS resolution failure for api.other.com",
+        text: "A DNS resolution failure preventing the browser from verifying the hostname.",
         sub: "Name didn't resolve",
-        fix: "If DNS failed there'd be no 200 response at all. The request succeeded; the browser is enforcing cross-origin restrictions.",
+        fix: "If DNS resolution failed, the browser would be unable to find the server's IP address and could not send a request to receive an HTTP 200 response.",
       },
       {
-        text: "A server-side firewall rejecting the request",
+        text: "A network-layer gateway firewall rejecting the incoming request payload.",
         sub: "Network policy blocked it",
-        fix: "The server returned 200, so it wasn't blocked at the network. The browser blocked the JavaScript from reading the response due to origin rules.",
+        fix: "If a firewall rejected the request, the server would never receive it to generate a 200 response; the block is executed on the client side by the browser.",
       },
     ],
     correctIndex: 1,
@@ -1369,27 +1521,31 @@ export const QUESTIONS = [
     subject: "CN",
     concept: "Sessions & Cookies",
     difficulty: "easy",
-    stem: "HTTP is stateless, yet a website keeps you logged in across many requests. After login, the server sends a value the browser automatically attaches to every later request to identify you. What is this value carried in?",
+    stem: `An application uses stateless HTTP requests but needs to maintain a logged-in session. Upon successful authentication, the server includes this header in the response:
+\`\`\`http
+Set-Cookie: session_id=xyz123; Secure; HttpOnly; SameSite=Strict
+\`\`\`
+How does the browser handle this value on subsequent requests to keep the user logged in?`,
     options: [
       {
-        text: "The TCP sequence number",
+        text: "It encodes the session identifier in the TCP sequence number of each segment.",
         sub: "Identifies the user across requests",
-        fix: "TCP sequence numbers order bytes within one connection; they don't persist identity across separate HTTP requests.",
+        fix: "TCP sequence numbers are used for ordering and reassembling bytes at the transport layer, not for carrying application-layer session data.",
       },
       {
-        text: "The DNS TTL",
+        text: "It caches the session identifier inside the local DNS resolver's TTL records.",
         sub: "Caches your login",
-        fix: "DNS TTL controls how long a name resolution is cached; it has nothing to do with user sessions.",
+        fix: "DNS TTL records control how long domain name resolutions are cached and cannot store user session identifiers or application data.",
       },
       {
-        text: "A cookie (often a session id), sent via Set-Cookie/Cookie headers",
+        text: "It automatically appends the session identifier to a header on subsequent requests.",
         sub: "Browser auto-attaches it per request",
         fix: "",
       },
       {
-        text: "The source MAC address",
+        text: "It broadcasts the session identifier via the link-local source hardware MAC address.",
         sub: "Hardware address identifies the session",
-        fix: "MAC addresses are link-local and not visible to the web server across the internet; they don't carry session identity.",
+        fix: "MAC addresses are physical layer addresses used within a local network segment and are not transmitted in HTTP headers across the internet.",
       },
     ],
     correctIndex: 2,
@@ -1406,22 +1562,22 @@ export const QUESTIONS = [
     stem: "Twenty devices on a home network all share a single public IP address when reaching the internet, yet replies still find the right device. Which router function makes this possible?",
     options: [
       {
-        text: "ARP, by broadcasting to find devices",
+        text: "Address Resolution Protocol (ARP), which broadcasts reply packets to all local network MAC addresses.",
         sub: "ARP routes internet replies",
-        fix: "ARP maps IP to MAC on the local link only. It can't translate between private and public internet addresses.",
+        fix: "ARP maps IP addresses to physical MAC addresses on the local network link and does not translate or route public internet traffic.",
       },
       {
-        text: "TLS, by encrypting each device's traffic",
+        text: "Transport Layer Security (TLS), which encrypts each stream to ensure private data separation at the gateway.",
         sub: "Encryption separates the flows",
-        fix: "TLS secures content but does nothing to share one public IP among many hosts or to demultiplex replies.",
+        fix: "TLS provides encryption and data integrity for applications but does not manage IP sharing or map returning packets to internal hosts.",
       },
       {
-        text: "DNS, by giving each device a name",
+        text: "Domain Name System (DNS), which maps specific internal hostnames to incoming response payloads.",
         sub: "Names route the replies",
-        fix: "DNS resolves names to addresses; it doesn't multiplex many private hosts behind one public IP or track return traffic.",
+        fix: "DNS resolves human-readable domain names to IP addresses; it has no role in routing packets or mapping active connections to devices.",
       },
       {
-        text: "NAT (network address translation), tracking ports per connection",
+        text: "Network Address Translation (NAT), which rewrites and tracks source ports for outbound connections.",
         sub: "Maps internal addresses/ports to one public IP",
         fix: "",
       },
@@ -1437,27 +1593,43 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "SOLID",
     difficulty: "medium",
-    stem: "A PaymentProcessor class directly constructs RazorpayClient, StripeClient, and PayPalClient, then switches on provider names. Which design move most directly improves extensibility?",
+    stem: `You are refactoring a payment processing module where concrete client SDKs are instantiated directly within a conditional statement:
+
+\`\`\`javascript
+class PaymentProcessor {
+  process(provider, amount) {
+    if (provider === "stripe") {
+      const client = new StripeClient();
+      client.charge(amount);
+    } else if (provider === "paypal") {
+      const client = new PayPalClient();
+      client.pay(amount);
+    }
+  }
+}
+\`\`\`
+
+Which design move most directly decouples the processor and simplifies adding new payment vendors?`,
     options: [
       {
-        text: "Make every provider method static",
-        sub: "Removes instances but not coupling",
-        fix: "Static methods do not solve the core problem. The processor still knows about every provider.",
+        text: "Make the provider client methods static so that the processor does not need to instantiate them.",
+        sub: "Remove instance creation overhead",
+        fix: "Using static methods does not remove the processor's coupling to concrete provider classes; it still must import and branch on them.",
       },
       {
-        text: "Depend on a PaymentGateway interface and inject implementations",
-        sub: "Lets new providers plug in behind a stable contract",
+        text: "Introduce a gateway interface and inject concrete provider classes that implement it into the processor.",
+        sub: "Depend on abstractions to allow new integrations without code modifications",
         fix: "",
       },
       {
-        text: "Move all code into a base class",
-        sub: "Centralizes behavior through inheritance",
-        fix: "A base class can increase coupling. The better move is to depend on an abstraction and compose concrete gateways.",
+        text: "Consolidate the concrete client methods into a shared parent base class to reuse common connection logic.",
+        sub: "Inherit common SDK behavior from a base class",
+        fix: "A shared base class still couples the hierarchy to specific client libraries and does not address the conditional routing issue.",
       },
       {
-        text: "Add more if-else branches",
-        sub: "Keeps all provider logic in one class",
-        fix: "More branches make every new provider modify the same class. That violates the open-closed direction.",
+        text: "Encapsulate the conditional branches into helper methods inside the class to isolate the instantiation logic.",
+        sub: "Improve internal readability using local helper methods",
+        fix: "Isolating the branches internally makes the code cleaner but does not remove the need to modify the file when a provider is added.",
       },
     ],
     correctIndex: 1,
@@ -1471,26 +1643,36 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Single Responsibility",
     difficulty: "medium",
-    stem: "An InvoiceManager class computes totals, renders a PDF, and emails the customer. A change to the email template forces re-testing tax math, and a tax-rule change risks breaking PDF layout. Which principle is violated?",
+    stem: `You are reviewing a class that contains code for multiple domains of concern:
+
+\`\`\`javascript
+class InvoiceManager {
+  calculateTaxes(invoice) { /* tax rules */ }
+  generatePdf(invoice) { /* canvas rendering */ }
+  sendEmail(invoice) { /* SMTP logic */ }
+}
+\`\`\`
+
+A change to the email layout forces re-testing tax math, and a tax rule change risks breaking PDF formatting. Which principle is violated?`,
     options: [
       {
-        text: "Interface Segregation Principle",
-        sub: "Clients shouldn't depend on unused methods",
-        fix: "ISP is about fat interfaces forcing clients to implement irrelevant methods. The issue here is one class with multiple responsibilities.",
+        text: "Interface Segregation: Because the class exposes multiple public methods that are not used by the same clients.",
+        sub: "Split interfaces to avoid forcing unused dependencies on clients",
+        fix: "The problem is that the class contains too many distinct responsibilities, not that it implements an overly broad interface.",
       },
       {
-        text: "Dependency Inversion Principle",
-        sub: "Depend on abstractions, not concretions",
-        fix: "DIP concerns the direction of dependencies. The described coupling is from mixing unrelated responsibilities, which is SRP.",
+        text: "Dependency Inversion: Because the high-level business policies do not depend on low-level database details.",
+        sub: "Depend on abstractions rather than concrete modules",
+        fix: "Dependency Inversion concerns the direction of dependencies between modules; here, the issue is mixing unrelated domains of logic.",
       },
       {
-        text: "Liskov Substitution Principle",
-        sub: "Subtypes must be substitutable for base types",
-        fix: "LSP is about inheritance and substitutability. There's no subtype misbehavior here — just one class doing three unrelated jobs.",
+        text: "Liskov Substitution: Because subclasses fail to preserve the behavioral invariants of the parent invoice classes.",
+        sub: "Ensure subtype correctness in polymorphic hierarchies",
+        fix: "There are no subclasses or inheritance hierarchies involved in the scenario, so substitutability is not violated.",
       },
       {
-        text: "Single Responsibility Principle",
-        sub: "A class should have one reason to change",
+        text: "Single Responsibility: Because the module mixes tax computation, layout rendering, and notification delivery.",
+        sub: "Divide modules so that each has only a single reason to change",
         fix: "",
       },
     ],
@@ -1505,26 +1687,40 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Liskov Substitution",
     difficulty: "hard",
-    stem: "A Rectangle class has setWidth and setHeight. A Square subclass overrides them to keep width and height equal. Existing code that sets width to 5 and height to 4 on a Rectangle now gets area 16 when handed a Square, breaking its assumptions. Which principle does this violate?",
+    stem: `You are reviewing a geometric shape library with the following implementation:
+
+\`\`\`javascript
+class Rectangle {
+  setWidth(w) { this.width = w; }
+  setHeight(h) { this.height = h; }
+}
+
+class Square extends Rectangle {
+  setWidth(w) { this.width = w; this.height = w; }
+  setHeight(h) { this.width = h; this.height = h; }
+}
+\`\`\`
+
+Existing client code sets width to 5 and height to 4, expecting an area of 20, but fails when passed a Square. Which principle is violated?`,
     options: [
       {
-        text: "Open-Closed Principle",
-        sub: "Open for extension, closed for modification",
-        fix: "OCP is about extending behavior without editing stable code. Here the problem is a subtype breaking the base type's expected behavior, which is LSP.",
+        text: "Open-Closed: The classes cannot be extended with new shapes without modifying existing base methods.",
+        sub: "Allow behavioral extension without source code changes",
+        fix: "The scenario focuses on subclass behavior breaking expectations of existing client code, not extension limitations.",
       },
       {
-        text: "Interface Segregation Principle",
-        sub: "Avoid fat interfaces",
-        fix: "ISP concerns splitting bloated interfaces. The Square/Rectangle issue is about substitutability of a subtype, i.e., LSP.",
+        text: "Interface Segregation: The interface forces clients to depend on properties they do not utilize.",
+        sub: "Decompose fat interfaces to avoid unused method dependencies",
+        fix: "The interface does not contain unused methods; the issue is that subclass behavior violates base class contract assumptions.",
       },
       {
-        text: "Single Responsibility Principle",
-        sub: "One reason to change",
-        fix: "The class isn't doing multiple jobs; a subtype is violating the base contract. That's LSP, not SRP.",
+        text: "Single Responsibility: The shape classes are performing multiple unrelated domain responsibilities.",
+        sub: "Isolate distinct axes of change into separate classes",
+        fix: "The classes only model geometric dimensions, which is a single concern; the issue is subtype substitution behavior.",
       },
       {
-        text: "Liskov Substitution Principle",
-        sub: "A subtype must honor the base type's contract",
+        text: "Liskov Substitution: The subclass overrides base methods in a way that breaks client contract assumptions.",
+        sub: "Ensure subtypes remain fully substitutable for their parent classes",
         fix: "",
       },
     ],
@@ -1539,27 +1735,39 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Composition vs Inheritance",
     difficulty: "hard",
-    stem: "A Notification base class has subclasses for EmailNotification, SmsNotification, PromotionalEmail, TransactionalSms, and more combinations keep appearing. What design problem is showing up?",
+    stem: `You are modeling notification messages using class inheritance. Over time, the class structure has grown to include the following:
+
+\`\`\`
+Notification
+├── EmailNotification
+│   ├── PromotionalEmail
+│   └── TransactionalEmail
+└── SmsNotification
+    ├── PromotionalSms
+    └── TransactionalSms
+\`\`\`
+
+As more channels (Push, Slack) and message types (Alerts) are added, the number of subclasses grows combinatorially. What is this design smell called?`,
     options: [
       {
-        text: "Inheritance hierarchy explosion",
-        sub: "Subclasses multiply as independent behaviors combine",
+        text: "Inheritance Explosion: Subclasses multiply rapidly as independent axes of behavior are combined through subclassing.",
+        sub: "Combines orthogonal dimensions using inheritance instead of composition",
         fix: "",
       },
       {
-        text: "A singleton is missing",
-        sub: "Only one instance should exist",
-        fix: "Singleton controls instance count. It does not solve combinatorial subclass growth.",
+        text: "Missing Singleton: The system fails to centralize instance creation, creating duplicate configurations at runtime.",
+        sub: "Fail to restrict class instantiation to a single global object",
+        fix: "Singleton only restricts the number of active instances; it does not solve the combinatorial growth of classes in a hierarchy.",
       },
       {
-        text: "Runtime polymorphism is impossible",
-        sub: "Objects cannot choose behavior dynamically",
-        fix: "Runtime polymorphism is possible here; the issue is using inheritance for combinations that would compose better.",
+        text: "Dynamic Binding Failure: The compiler is unable to determine the target implementation at runtime.",
+        sub: "Unresolved polymorphic method calls during execution",
+        fix: "Polymorphism functions fine here; the issue is the static class structure itself, which requires compile-time code duplication.",
       },
       {
-        text: "Encapsulation failure",
-        sub: "Internal state leaks across object boundaries",
-        fix: "Encapsulation may still be fine. The visible issue is that subclass count grows with every combination of channel and message type.",
+        text: "Encapsulation Leaks: Internal state variables are exposed across classes, breaking data boundaries.",
+        sub: "Exposing private members to external calling scopes",
+        fix: "The data encapsulation may still be correct; the issue is subclass multiplication across two independent dimensions of change.",
       },
     ],
     correctIndex: 0,
@@ -1573,27 +1781,41 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Encapsulation",
     difficulty: "easy",
-    stem: "A BankAccount exposes its balance as a public, freely writable field. Other code sets balance to a negative number, bypassing the rule that withdrawals can't overdraw. Which OOP principle would have prevented this?",
+    stem: `You are inspecting a financial module where account balances can be manipulated directly by external modules:
+
+\`\`\`javascript
+class BankAccount {
+  constructor() {
+    this.balance = 0;
+  }
+}
+
+// External caller
+const account = new BankAccount();
+account.balance = -1000; // Bypasses overdraft checks
+\`\`\`
+
+Which OOP concept should be applied to prevent direct external manipulation and enforce validation rules?`,
     options: [
       {
-        text: "Inheritance: put balance in a base class",
-        sub: "A parent class secures the field",
-        fix: "Merely moving the field to a base class doesn't restrict access. Without hiding it, callers can still set invalid values.",
+        text: "Inheritance: Define the balance property in a base class to automatically secure it from external modifications.",
+        sub: "Use parent class definitions to protect state variables",
+        fix: "Moving a property to a base class does not restrict its visibility; if it remains public, external code can still write to it.",
       },
       {
-        text: "Abstraction: describe the account in an interface",
-        sub: "An interface blocks bad writes",
-        fix: "Abstraction defines what operations exist, but the concrete safeguard against direct invalid writes is encapsulation hiding the state.",
+        text: "Abstraction: Define a BankAccount interface that hides the details of the balance property representation.",
+        sub: "Conceal concrete implementations behind a interface contract",
+        fix: "Abstraction defines which operations are publicly available; it does not directly prevent raw properties from being writable.",
       },
       {
-        text: "Encapsulation: hide the field, expose controlled methods",
-        sub: "Guard invariants behind deposit/withdraw",
+        text: "Encapsulation: Make the balance property private and expose checked methods like deposit and withdraw to modify it.",
+        sub: "Restrict direct state access and expose controlled mutation interfaces",
         fix: "",
       },
       {
-        text: "Polymorphism: let subclasses override balance",
-        sub: "Overriding protects the value",
-        fix: "Polymorphism is about substitutable behavior across types; it doesn't prevent external code from writing an invalid balance.",
+        text: "Polymorphism: Allow subclasses to override the balance property to implement custom overdraft constraints.",
+        sub: "Use dynamic method dispatch to vary properties dynamically",
+        fix: "Polymorphism handles type-specific method execution; it does not protect properties from direct external modifications.",
       },
     ],
     correctIndex: 2,
@@ -1607,27 +1829,37 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Polymorphism",
     difficulty: "medium",
-    stem: "A renderer loops over a list of Shape references and calls shape.area() on each. Circles, Squares, and Triangles each compute area differently, yet the loop has no type checks or switch. Which OOP feature makes the correct method run for each object?",
+    stem: `You are reviewing a rendering function that computes areas for a heterogeneous collection of shape objects:
+
+\`\`\`javascript
+function renderAreas(shapes) {
+  for (const shape of shapes) {
+    console.log(shape.area());
+  }
+}
+\`\`\`
+
+Circles, Squares, and Triangles each compute area differently, yet the loop has no type checks. Which OOP feature ensures the correct method runs for each object?`,
     options: [
       {
-        text: "Encapsulation hiding the area field",
-        sub: "Private data drives the call",
-        fix: "Encapsulation hides state; it doesn't choose which subclass's method executes. Dynamic dispatch does that.",
+        text: "Encapsulation: The shape object hides its internal dimensions and provides a public interface.",
+        sub: "Bundle data and code within a single object wrapper",
+        fix: "Encapsulation restricts direct data access; it does not coordinate which subclass method executes in a collection loop.",
       },
       {
-        text: "Method overloading resolved at compile time",
-        sub: "Same name, different parameter lists",
-        fix: "Overloading picks among same-named methods by argument types at compile time. Here one call dispatches to different implementations based on the runtime object — that's overriding/dynamic dispatch.",
+        text: "Method Overloading: The compiler resolves the target area method based on the parameter list at compile time.",
+        sub: "Distinguish methods with the same name by arguments",
+        fix: "Overloading is resolved statically at compile time based on parameter types; here, dispatch occurs at runtime based on the object instance.",
       },
       {
-        text: "Runtime (dynamic) polymorphism via method overriding",
-        sub: "The actual object's method is dispatched at runtime",
+        text: "Runtime Polymorphism: The runtime dynamically dispatches the call to the subclass that overrides the base method.",
+        sub: "Resolve method execution dynamically based on the concrete instance type",
         fix: "",
       },
       {
-        text: "Static binding to the Shape base method",
-        sub: "Always calls the base implementation",
-        fix: "Static binding to the base would call one fixed implementation, not each subclass's version. The scenario relies on runtime dispatch to the overrides.",
+        text: "Static Binding: The compiler resolves the method call directly to the base Shape class area implementation.",
+        sub: "Bind calls to declared reference types during compilation",
+        fix: "Static binding executes the declared base method, which would ignore the subclass implementations entirely.",
       },
     ],
     correctIndex: 2,
@@ -1641,27 +1873,36 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Factory Pattern",
     difficulty: "medium",
-    stem: "Client code is littered with `new MySqlConnection()`, `new PostgresConnection()`, etc., chosen by config. You want callers to request a connection by name without knowing concrete classes or constructors. Which pattern fits?",
+    stem: `You are refactoring a database client library where concrete connections are instantiated directly based on config files:
+
+\`\`\`javascript
+function connect(config) {
+  if (config.db === "mysql") return new MySqlConnection();
+  if (config.db === "postgres") return new PostgresConnection();
+}
+\`\`\`
+
+You want client code to obtain connection instances without coupling to concrete classes or their constructor parameters. Which pattern applies?`,
     options: [
       {
-        text: "Factory (method) pattern",
-        sub: "Centralize object creation behind a creator",
+        text: "Factory: Encapsulate instantiation logic behind a creator method, returning an object matching a common interface.",
+        sub: "Decouple client code from concrete constructors",
         fix: "",
       },
       {
-        text: "Observer pattern",
-        sub: "Notify subscribers of state changes",
-        fix: "Observer is for event notification between objects, not for deciding which concrete class to instantiate.",
+        text: "Observer: Set up a subscription network where connection status changes are broadcast to registered handlers.",
+        sub: "Publish state updates to a list of dependents",
+        fix: "Observer handles runtime state change notifications; it is not concerned with selecting or instantiating concrete classes.",
       },
       {
-        text: "Singleton pattern",
-        sub: "Ensure a single shared instance",
-        fix: "Singleton controls how many instances exist, not how the right concrete class is selected and created for the caller.",
+        text: "Singleton: Restrict database connection subclasses to a single instance throughout the application lifecycle.",
+        sub: "Ensure a class has only one global instance",
+        fix: "Singleton restricts instance count but does not address decoupling clients from concrete constructors or class selection.",
       },
       {
-        text: "Decorator pattern",
-        sub: "Wrap an object to add behavior",
-        fix: "Decorator adds responsibilities to an existing object dynamically; it doesn't solve choosing and constructing the right concrete type.",
+        text: "Decorator: Wrap connection instances dynamically to append logging or authentication filters at runtime.",
+        sub: "Extend object responsibilities without subclassing",
+        fix: "Decorator extends the functionality of existing instances; it does not handle class selection or instantiation logic.",
       },
     ],
     correctIndex: 0,
@@ -1675,27 +1916,39 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Strategy Pattern",
     difficulty: "medium",
-    stem: "A checkout class hardcodes a giant if-else choosing among flat-rate, weight-based, and free shipping calculations, and a new rule means editing that method again. You want to select the algorithm at runtime and add new ones without touching checkout. Which pattern applies?",
+    stem: `You are refactoring a shipping calculator that has a growing conditional branch for different shipping algorithms:
+
+\`\`\`javascript
+class ShippingCalculator {
+  calculate(order) {
+    if (order.type === "flat") return order.price * 0.1;
+    if (order.type === "weight") return order.weight * 2;
+    if (order.type === "express") return order.price * 0.25;
+  }
+}
+\`\`\`
+
+Adding new shipping methods requires modifying this class. Which pattern extracts these branches into swappable runtime objects?`,
     options: [
       {
-        text: "Adapter pattern",
-        sub: "Convert one interface to another",
-        fix: "Adapter reconciles incompatible interfaces. Here the algorithms already share intent; you need interchangeable strategies, not interface conversion.",
+        text: "Adapter: Convert the interface of each individual shipping algorithm to match what the client expects.",
+        sub: "Reconcile incompatible interface signatures",
+        fix: "Adapter translates interfaces between incompatible classes; here, the shipping algorithms already share the same conceptual input/output.",
       },
       {
-        text: "Strategy pattern: encapsulate each algorithm behind a common interface",
-        sub: "Inject the chosen algorithm at runtime",
+        text: "Strategy: Encapsulate each shipping calculation algorithm into its own class behind a common pricing interface.",
+        sub: "Inject interchangeable algorithms at runtime",
         fix: "",
       },
       {
-        text: "Facade pattern",
-        sub: "Simplify a complex subsystem",
-        fix: "Facade provides a simplified entry point to a subsystem; it doesn't address selecting among interchangeable algorithms at runtime.",
+        text: "Facade: Provide a simplified, high-level entry interface to hide the complexity of the shipping subsystem.",
+        sub: "Expose a unified interface to a set of interfaces",
+        fix: "Facade provides a simpler API to access a complex subsystem; it does not handle selecting or swapping algorithms at runtime.",
       },
       {
-        text: "Singleton pattern",
-        sub: "One shared instance",
-        fix: "Singleton governs instance count; it doesn't let you swap interchangeable algorithms or add new ones without editing checkout.",
+        text: "Singleton: Restrict each of the individual shipping calculation classes to a single global instance.",
+        sub: "Ensure only one instance of an algorithm exists",
+        fix: "Singleton only manages the instance count of classes; it does not help checkout swap algorithms or satisfy open-closed requirements.",
       },
     ],
     correctIndex: 1,
@@ -1709,26 +1962,32 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Coupling & Cohesion",
     difficulty: "hard",
-    stem: "Module A reaches deep into Module B's internals — `b.getConfig().getDb().getPool().setSize(10)` — so any change to B's internal structure breaks A. Which quality is poor here, and what reduces it?",
+    stem: `You are reviewing a class interaction where Module A configures database properties by digging through Module B's collaborators:
+
+\`\`\`javascript
+b.getConfig().getDb().getPool().setSize(10);
+\`\`\`
+
+Any change to the internal structure of B's configuration breaks Module A. Which architectural issue is present, and how should it be solved?`,
     options: [
       {
-        text: "Low cohesion; fix by merging A and B",
-        sub: "Combine modules into one",
-        fix: "Merging modules usually worsens design and doesn't address the chained internal access. The problem is tight coupling to B's structure, not cohesion.",
+        text: "Low Cohesion: Solve it by merging Module A and Module B into a single class to unify their responsibilities.",
+        sub: "Combine classes that reference each other's configuration",
+        fix: "Merging classes does not resolve the structural coupling and typically worsens cohesion by mixing unrelated responsibilities.",
       },
       {
-        text: "Too much encapsulation; fix by exposing more getters",
-        sub: "Add public accessors",
-        fix: "Adding more getters deepens the exposure of internals and increases coupling — the opposite of the fix. B should expose a purposeful operation instead.",
+        text: "Encapsulation Deficit: Solve it by exposing public properties on B's config chain so that B does not need getters.",
+        sub: "Make fields public to simplify access chains",
+        fix: "Exposing public properties increases coupling and violates encapsulation by exposing internal structure details.",
       },
       {
-        text: "Excessive polymorphism; fix by removing interfaces",
-        sub: "Fewer abstractions",
-        fix: "There's no polymorphism issue here. The chained calls reveal structural coupling, addressed by a cohesive method on B, not by removing abstractions.",
+        text: "Excessive Polymorphism: Solve it by removing intermediate interfaces to bind callers directly to implementation classes.",
+        sub: "Reduce abstract layers to simplify reference lookups",
+        fix: "Removing abstractions does not address the Law of Demeter violation and increases coupling to concrete types.",
       },
       {
-        text: "High coupling; reduce it by exposing a focused method on B (tell, don't ask)",
-        sub: "Hide internals behind intent-revealing operations",
+        text: "High Coupling: Solve it by exposing a dedicated configuration method on B that encapsulates the pool details.",
+        sub: "Adhere to the Law of Demeter and tell, don't ask",
         fix: "",
       },
     ],
@@ -1743,27 +2002,35 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Abstraction",
     difficulty: "easy",
-    stem: "A logging API offers a single log(message) method. Behind it, messages may go to a file, the console, or a remote service, but callers never see those details and don't change when the backend changes. Which OOP concept does this illustrate?",
+    stem: `You are reviewing a logging system interface:
+
+\`\`\`javascript
+interface Logger {
+  log(message: string): void;
+}
+\`\`\`
+
+Behind this interface, messages can be written to a local database, standard output, or a remote ingestion pipeline. Callers are unaffected by changes to these backends. Which OOP concept is illustrated?`,
     options: [
       {
-        text: "Inheritance: log() is shared via a base class",
-        sub: "Subclasses reuse the parent",
-        fix: "Inheritance is a reuse mechanism; it isn't the point here. The key idea is that callers see a simple interface and not the backend details — abstraction.",
+        text: "Inheritance: Because the logger subclasses reuse the log method implementation defined in the base Logger interface.",
+        sub: "Inherit common method definitions from a parent type",
+        fix: "Interfaces do not provide implementation details to inherit, and reuse is not the primary concept highlighted by hiding complexity.",
       },
       {
-        text: "Encapsulation of the caller's variables",
-        sub: "Hiding the caller's local state",
-        fix: "Encapsulation hides an object's own internal state. Here the emphasis is presenting a simplified interface that conceals how logging works — abstraction.",
+        text: "Encapsulation: Because the interface restricts external callers from inspecting the local variable state of the caller.",
+        sub: "Prevent external scope from accessing class properties",
+        fix: "Encapsulation hides internal object state; the scenario emphasizes presenting a simplified interface to hide behavior complexity.",
       },
       {
-        text: "Abstraction: expose essential behavior, hide implementation",
-        sub: "Callers depend on what, not how",
+        text: "Abstraction: Because the interface exposes essential behavior while hiding implementation details from the caller.",
+        sub: "Present a simplified contract and conceal the underlying mechanics",
         fix: "",
       },
       {
-        text: "Polymorphism choosing log() by argument type",
-        sub: "Overload resolution",
-        fix: "Polymorphism may help implement multiple backends, but the concept the scenario highlights is hiding complexity behind a simple interface — abstraction.",
+        text: "Polymorphism: Because the logger dispatches the log method call to different signature overloads at compile time.",
+        sub: "Resolve overloading variations during compilation",
+        fix: "Polymorphism can vary behavior at runtime, but the specific act of hiding details behind a simple interface is called abstraction.",
       },
     ],
     correctIndex: 2,
@@ -1777,26 +2044,37 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Observer Pattern",
     difficulty: "medium",
-    stem: "When an order's status changes, several unrelated systems must react: email, analytics, and inventory. You want the order object to notify all interested parties without knowing who they are, and to allow adding new listeners later. Which pattern fits?",
+    stem: `You are designing an order fulfillment system where multiple modules must react when an order is updated:
+
+\`\`\`javascript
+class Order {
+  setStatus(status) {
+    this.status = status;
+    // Email, Analytics, and Inventory modules must react here
+  }
+}
+\`\`\`
+
+You want to allow modules to subscribe dynamically without coupling the Order class to them. Which pattern fits?`,
     options: [
       {
-        text: "Strategy pattern",
-        sub: "Swap interchangeable algorithms",
-        fix: "Strategy selects one algorithm to use; it doesn't model one subject notifying many independent subscribers of an event.",
+        text: "Strategy: Wrap each individual reaction system in a pricing or routing algorithm interface inside the Order class.",
+        sub: "Inject a single interchangeable algorithm",
+        fix: "Strategy selects one algorithm at a time; it is not suited for broadcasting events to an arbitrary number of systems.",
       },
       {
-        text: "Factory pattern",
-        sub: "Encapsulate object creation",
-        fix: "Factory is about creating objects, not broadcasting state changes to a dynamic set of listeners.",
+        text: "Factory: Set up a central instantiation registry to construct the correct handler subclass based on the status name.",
+        sub: "Encapsulate concrete class object creation",
+        fix: "Factory centralizes object creation but does not manage runtime event notifications or dependencies between active instances.",
       },
       {
-        text: "Decorator pattern",
-        sub: "Wrap to add behavior",
-        fix: "Decorator adds responsibilities to a single object by wrapping it; it doesn't provide one-to-many event notification.",
+        text: "Decorator: Wrap the Order instance in nested wrappers that intercept the setStatus method to call handler modules.",
+        sub: "Extend object behavior dynamically through wrappers",
+        fix: "Decorator extends the behavior of a single object; using it to broadcast events to unrelated systems leads to highly complex nesting.",
       },
       {
-        text: "Observer pattern: subject notifies registered observers",
-        sub: "Decoupled publish/subscribe of state changes",
+        text: "Observer: Maintain a list of subscriber interfaces on the Order class, invoking their update method upon state changes.",
+        sub: "Decouple event publishers from subscribers using interface callbacks",
         fix: "",
       },
     ],
@@ -1811,27 +2089,37 @@ export const QUESTIONS = [
     subject: "OOP",
     concept: "Singleton Pattern",
     difficulty: "easy",
-    stem: "An app needs exactly one shared configuration object that every module reads, and creating multiple copies causes inconsistent settings. You want a single globally accessible instance created once. Which pattern is intended for this, and what's a common caveat?",
+    stem: `You are designing a configuration manager that must be shared across all modules in your application:
+
+\`\`\`javascript
+class AppConfig {
+  constructor() {
+    this.settings = loadSettings();
+  }
+}
+\`\`\`
+
+Instantiating multiple config objects causes inconsistent settings at runtime. Which pattern restricts this class to one instance, and what is its main caveat?`,
     options: [
       {
-        text: "Factory; caveat: it creates many instances",
-        sub: "Centralized creation",
-        fix: "A factory's job is to create instances on demand — potentially many — not to guarantee exactly one shared instance.",
+        text: "Factory: Restricts connection access through a creator registry; caveat: it adds overhead by recreating instances.",
+        sub: "Centralize object creation through a method interface",
+        fix: "A factory is designed to create new instances on demand and does not inherently restrict a class to a single instance.",
       },
       {
-        text: "Singleton; caveat: global state hurts testability",
-        sub: "One instance, global access point",
+        text: "Singleton: Restricts the class to a single instance and provides a global access point; caveat: it makes testing harder.",
+        sub: "Ensure only one shared instance is accessible globally",
         fix: "",
       },
       {
-        text: "Observer; caveat: too many notifications",
-        sub: "Publish/subscribe",
-        fix: "Observer is about event notification, not ensuring a single shared instance of an object.",
+        text: "Observer: Restricts updates through a broadcast system; caveat: it causes performance lag with many event listeners.",
+        sub: "Publish state changes to registered dependents",
+        fix: "Observer handles event distribution and does not regulate or restrict the instantiation count of a class.",
       },
       {
-        text: "Adapter; caveat: interface mismatch",
-        sub: "Convert interfaces",
-        fix: "Adapter reconciles incompatible interfaces; it has nothing to do with constraining an object to a single instance.",
+        text: "Adapter: Restricts connection parameters via interface translation; caveat: it introduces translation overhead.",
+        sub: "Reconcile incompatible method signatures",
+        fix: "Adapter translates interfaces between incompatible classes; it does not constrain how many class instances can be created.",
       },
     ],
     correctIndex: 1,
@@ -3679,7 +3967,17 @@ export const INTERACTIVE_QUESTIONS = [
     difficulty: "hard",
     title: "C++ RAII Lock Guard Pattern",
     instructions: "Complete this C++ class representing the RAII pattern for a thread-safe mutex guard. Fill in the class name for the constructor and the destructor syntax.",
-    code: "class LockGuard {\nprivate:\n    Mutex& mtx;\npublic:\n    [BLANK1](Mutex& m) : mtx(m) {\n        mtx.lock();\n    }\n    [BLANK2]LockGuard() {\n        mtx.unlock();\n    }\n};",
+    code: `class LockGuard {
+private:
+    Mutex& mtx;
+public:
+    [BLANK1](Mutex& m) : mtx(m) {
+        mtx.lock();
+    }
+    [BLANK2]LockGuard() {
+        mtx.unlock();
+    }
+};`,
     blanks: [
       { id: "BLANK1", correct: "LockGuard", placeholder: "constructor name" },
       { id: "BLANK2", correct: "~", placeholder: "destructor symbol" },
